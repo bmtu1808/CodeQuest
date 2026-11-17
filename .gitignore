@@ -1,0 +1,43 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# build artifacts
+.next/
+out/
+build/
+dist/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets & local env (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+secrets/
+credentials*.json
+
+# database dumps / local data
+*.sql.gz
+*.dump
+pgdata/
+
+# logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# misc
+.vercel
+.claude/

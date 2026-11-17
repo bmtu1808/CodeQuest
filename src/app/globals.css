@@ -1,0 +1,80 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --bg: #f7f8fa;
+  --surface: #ffffff;
+  --surface-2: #f0f2f5;
+  --line: #e5e7eb;
+  --fg: #2b2f36;
+  --muted: #6b7280;
+  --code-bg: #f3f4f6;
+}
+.dark {
+  --bg: #131f24;
+  --surface: #1c2a31;
+  --surface-2: #243540;
+  --line: #37464f;
+  --fg: #f1f7fb;
+  --muted: #9fb0ba;
+  --code-bg: #0f1a1f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-code: var(--code-bg);
+
+  --color-brand: #58cc02;
+  --color-brand-dark: #46a302;
+  --color-sky: #1cb0f6;
+  --color-sky-dark: #1899d6;
+  --color-grape: #ce82ff;
+  --color-grape-dark: #a560d6;
+  --color-tangerine: #ff9600;
+  --color-tangerine-dark: #d97f00;
+  --color-danger: #ff4b4b;
+  --color-danger-dark: #d63a3a;
+  --color-gold: #ffc800;
+  --color-gold-dark: #d9a900;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, "SFMono-Regular", Menlo, monospace;
+
+  --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+  --animate-shake: shake 0.35s;
+  --animate-float: float 4s ease-in-out infinite;
+  @keyframes pop {
+    0% { transform: scale(0.85); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+  @keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    20%, 60% { transform: translateX(-6px); }
+    40%, 80% { transform: translateX(6px); }
+  }
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+  }
+}
+
+html { color-scheme: light; }
+html.dark { color-scheme: dark; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
+}
+
+:focus-visible { outline: 3px solid var(--color-sky); outline-offset: 2px; border-radius: 8px; }

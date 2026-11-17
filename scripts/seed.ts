@@ -1,0 +1,75 @@
+import { drizzle } from "drizzle-orm/node-postgres";
+import { and, eq, notInArray, sql } from "drizzle-orm";
+import { Pool } from "pg";
+import * as schema from "../src/server/db/schema";
+import { WORLDS } from "../src/content";
+import { ROADMAP } from "../src/content/roadmap";
+import { loadEnvFiles } from "./load-env";
+
+loadEnvFiles();
+
+/** Idempotent: safe to re-run. Upserts by slug so learner progress (which references ids) is preserved. */
+async function main() {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL is not set (see .env.example)");
+  const pool = new Pool({ connectionString: url, ssl: process.env.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined });
+  const db = drizzle(pool, { schema });
+  const { worlds, units, lessons, lessonQuestions } = schema;
+
+  const all = [...WORLDS, ...ROADMAP];
+  let nLessons = 0;
+  let nQuestions = 0;
+
+  await db.transaction(async (tx) => {
+    for (const [wi, w] of all.entries()) {
+      const [wRow] = await tx
+        .insert(worlds)
+        .values({ slug: w.slug, title: w.title, description: w.description, icon: w.icon, color: w.color, position: wi + 1, published: w.published })
+        .onConflictDoUpdate({ target: worlds.slug, set: { title: w.title, description: w.description, icon: w.icon, color: w.color, position: wi + 1, published: w.published, deletedAt: null } })
+        .returning({ id: worlds.id });
+      for (const [ui, u] of w.units.entries()) {
+        const [uRow] = await tx
+          .insert(units)
+          .values({ worldId: wRow!.id, slug: u.slug, title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true })
+          .onConflictDoUpdate({ target: [units.worldId, units.slug], set: { title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true, deletedAt: null } })
+          .returning({ id: units.id });
+        for (const [li, l] of u.lessons.entries()) {
+          nLessons++;
+          const [lRow] = await tx
+            .insert(lessons)
+            .values({ unitId: uRow!.id, slug: l.slug, title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true })
+            .onConflictDoUpdate({ target: [lessons.unitId, lessons.slug], set: { title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true, deletedAt: null } })
+            .returning({ id: lessons.id });
+          // Park existing positions out of the way so reordering cannot violate the unique (lesson, position) index.
+          await tx.update(lessonQuestions).set({ position: sql`${lessonQuestions.position} + 1000` }).where(eq(lessonQuestions.lessonId, lRow!.id));
+          for (const [qi, q] of l.questions.entries()) {
+            nQuestions++;
+            const existing = await tx
+              .select({ id: lessonQuestions.id })
+              .from(lessonQuestions)
+              .where(and(eq(lessonQuestions.lessonId, lRow!.id), eq(lessonQuestions.position, qi + 1 + 1000)))
+              .limit(1);
+            const values = { type: q.type, prompt: q.prompt, code: q.code ?? null, data: q.data, answer: q.answer, explanation: q.explanation, position: qi + 1, deletedAt: null };
+            if (existing[0]) await tx.update(lessonQuestions).set(values).where(eq(lessonQuestions.id, existing[0].id));
+            else await tx.insert(lessonQuestions).values({ lessonId: lRow!.id, ...values });
+          }
+          // Questions removed from the content: soft-delete the leftovers (still parked at 1000+).
+          await tx
+            .update(lessonQuestions)
+            .set({ deletedAt: new Date() })
+            .where(and(eq(lessonQuestions.lessonId, lRow!.id), sql`${lessonQuestions.position} >= 1000`));
+        }
+      }
+    }
+    // Retire worlds that disappeared from the content files.
+    await tx.update(worlds).set({ published: false }).where(notInArray(worlds.slug, all.map((w) => w.slug)));
+  });
+
+  console.log(`✔ seeded ${all.length} worlds (${WORLDS.length} playable), ${nLessons} lessons, ${nQuestions} questions`);
+  await pool.end();
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

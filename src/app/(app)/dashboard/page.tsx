@@ -1,0 +1,150 @@
+import type { Metadata } from "next";
+import { Flame, Sparkles, Target, Zap } from "lucide-react";
+import { redirect } from "next/navigation";
+import { WeekChart } from "@/components/dashboard/week-chart";
+import { ButtonLink } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { ProgressBar } from "@/components/ui/progress-bar";
+import { requireUser } from "@/server/auth/session";
+import { getLearningPath, nextLesson } from "@/server/services/path";
+import { getActivity, getRecentCompletions, getSnapshot } from "@/server/services/snapshot";
+
+export const metadata: Metadata = { title: "Dashboard" };
+
+export default async function DashboardPage() {
+  const user = await requireUser();
+  if (!user.onboardingCompleted) redirect("/onboarding");
+  const [snap, path, week, recent] = await Promise.all([
+    getSnapshot(user),
+    getLearningPath(user.id),
+    getActivity(user, 7),
+    getRecentCompletions(user.id),
+  ]);
+  const next = nextLesson(path);
+  const nextUnit = path.flatMap((w) => w.units).find((u) => u.lessons.some((l) => l.id === next?.id));
+  const total = path.reduce((s, w) => s + w.total, 0);
+  const done = path.reduce((s, w) => s + w.completed, 0);
+  const goalPct = snap.dailyGoal ? Math.min(1, snap.todayXp / snap.dailyGoal) : 0;
+  const firstTime = snap.lessonsCompleted === 0;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
+      <div className="flex flex-col gap-6">
+        <div>
+          <h1 className="text-3xl font-black">{firstTime ? `Welcome, ${user.displayName.split(" ")[0]}!` : "Welcome back, Programmer!"}</h1>
+          <p className="mt-1 text-muted">
+            {snap.streakAtRisk ? "Your streak is waiting. One lesson keeps it alive." : firstTime ? "Your C++ adventure starts with a single line of code." : "Keep the momentum going."}
+          </p>
+        </div>
+
+        <Card className="relative overflow-hidden border-brand/40 bg-brand/10 p-6">
+          {next ? (
+            <>
+              <p className="text-xs font-extrabold uppercase tracking-widest text-brand-dark dark:text-brand">{nextUnit?.title ?? "Next lesson"}</p>
+              <h2 className="mt-1 text-2xl font-black">{next.title}</h2>
+              <p className="mt-1 max-w-md text-muted">{next.summary}</p>
+              <ButtonLink href={`/lesson/${next.id}`} prefetch={false} size="lg" className="mt-5">
+                {next.state === "in_progress" ? "Continue Learning" : firstTime ? "Start Learning" : "Continue Learning"}
+              </ButtonLink>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-black">You finished every available lesson!</h2>
+              <p className="mt-1 text-muted">More worlds are on the way. Replay any lesson from the Learning Path to polish your skills.</p>
+              <ButtonLink href="/learn" size="lg" variant="blue" className="mt-5">
+                Open Learning Path
+              </ButtonLink>
+            </>
+          )}
+        </Card>
+
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Card className="flex items-center gap-3 p-4">
+            <Zap className="text-gold" fill="currentColor" />
+            <div>
+              <p className="text-2xl font-black leading-none">{snap.totalXp.toLocaleString("en-US")}</p>
+              <p className="text-xs font-bold uppercase text-muted">Total XP</p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-3 p-4">
+            <Flame className="text-tangerine" fill="currentColor" />
+            <div>
+              <p className="text-2xl font-black leading-none">{snap.streak}</p>
+              <p className="text-xs font-bold uppercase text-muted">Day streak</p>
+            </div>
+          </Card>
+          <Card className="flex items-center gap-3 p-4">
+            <Sparkles className="text-grape" />
+            <div>
+              <p className="text-2xl font-black leading-none">{snap.lessonsCompleted}</p>
+              <p className="text-xs font-bold uppercase text-muted">Lessons done</p>
+            </div>
+          </Card>
+        </div>
+
+        <Card>
+          <h2 className="mb-4 text-lg font-black">This week</h2>
+          <WeekChart days={week} today={snap.today} />
+        </Card>
+
+        <Card>
+          <h2 className="mb-3 text-lg font-black">Recent activity</h2>
+          {recent.length === 0 ? (
+            <p className="text-muted">No lessons completed yet. Your first one is only a few minutes away.</p>
+          ) : (
+            <ul className="divide-y-2 divide-line">
+              {recent.map((r) => (
+                <li key={r.id} className="flex items-center justify-between gap-3 py-3">
+                  <div>
+                    <p className="font-bold">{r.title}</p>
+                    <p className="text-xs text-muted">
+                      {r.completedAt?.toLocaleDateString("en-US", { month: "short", day: "numeric" })} · {r.mistakes === 0 ? "Perfect" : `${r.mistakes} mistake${r.mistakes > 1 ? "s" : ""}`}
+                    </p>
+                  </div>
+                  <span className="font-extrabold text-gold-dark dark:text-gold">{r.xp > 0 ? `+${r.xp} XP` : "Practice"}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      </div>
+
+      <aside className="flex flex-col gap-6">
+        <Card>
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-lg font-black">Level {snap.level.level}</h2>
+            <span className="text-sm font-bold text-muted">{snap.level.title}</span>
+          </div>
+          <ProgressBar value={snap.level.progress} className="mt-3" color="bg-grape" label="Level progress" />
+          <p className="mt-2 text-xs font-bold text-muted">
+            {snap.level.isMax ? "Max level reached" : `${snap.level.xpIntoLevel} / ${snap.level.xpForNext} XP to level ${snap.level.level + 1}`}
+          </p>
+        </Card>
+        <Card>
+          <div className="flex items-center gap-2">
+            <Target className="text-sky" size={20} />
+            <h2 className="text-lg font-black">Daily goal</h2>
+          </div>
+          <ProgressBar value={goalPct} className="mt-3" color="bg-sky" label="Daily XP goal" />
+          <p className="mt-2 text-xs font-bold text-muted">
+            {snap.todayXp} / {snap.dailyGoal} XP today {goalPct >= 1 && "· Goal reached!"}
+          </p>
+        </Card>
+        <Card>
+          <h2 className="text-lg font-black">Course progress</h2>
+          <ProgressBar value={total ? done / total : 0} className="mt-3" label="Course progress" />
+          <p className="mt-2 text-xs font-bold text-muted">
+            {done} of {total} lessons completed
+          </p>
+          <ButtonLink href="/learn" variant="outline" size="sm" className="mt-4 w-full">
+            Open Learning Path
+          </ButtonLink>
+        </Card>
+        <Card className="border-dashed">
+          <h2 className="text-sm font-black uppercase tracking-wide text-muted">Coming in later phases</h2>
+          <p className="mt-2 text-sm text-muted">Coding practice with a real judge, daily quests, achievements, leaderboards and contests are not built yet.</p>
+        </Card>
+      </aside>
+    </div>
+  );
+}
