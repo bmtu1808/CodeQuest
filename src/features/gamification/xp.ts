@@ -3,6 +3,8 @@
 export const XP_RULES = {
   lessonComplete: 20,
   perfectBonus: 10,
+  /** XP for the first Accepted solution of a problem, by difficulty. */
+  problem: { newbie: 10, easy: 15, medium: 30, hard: 50, expert: 50 } as Record<string, number>,
   /** streak length -> bonus XP, granted once per milestone per user (idempotent in the ledger). */
   streakMilestones: { 3: 10, 7: 25, 14: 50, 30: 100, 60: 200, 100: 400 } as Record<number, number>,
 } as const;

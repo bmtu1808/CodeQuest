@@ -1,0 +1,12 @@
+import type { ProblemSeed } from "./types";
+import { aPlusB, countEvens, digitSum, helloName, primeCheck, reverseArray } from "./set1";
+import { lowerBound, longestRun, maxSubarray, pairWithSum, prefixQueries } from "./set2";
+import { brackets, gridPath, inversions, lis, minCoins, subarrayCount } from "./set3";
+
+/** Ordered roughly by difficulty; the list order is the default order in the Practice page. */
+export const PROBLEMS: ProblemSeed[] = [
+  helloName, aPlusB, countEvens, reverseArray, digitSum,
+  primeCheck, longestRun, prefixQueries, brackets, pairWithSum,
+  lowerBound, maxSubarray, subarrayCount, minCoins, gridPath,
+  lis, inversions,
+];

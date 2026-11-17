@@ -6,11 +6,11 @@ import { rateLimit } from "@/server/rate-limit";
 import type { User } from "@/server/db/schema";
 
 /** Wraps a route handler: authentication, rate limiting and uniform error responses. */
-export async function handle(fn: (user: User) => Promise<unknown>, opts: { limit?: number } = {}): Promise<NextResponse> {
+export async function handle(fn: (user: User) => Promise<unknown>, opts: { limit?: number; bucket?: string } = {}): Promise<NextResponse> {
   try {
     const user = await getCurrentUser();
     if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-    const rl = rateLimit(`api:${user.id}`, opts.limit ?? 120, 60_000);
+    const rl = rateLimit(`api:${opts.bucket ?? "default"}:${user.id}`, opts.limit ?? 120, 60_000);
     if (!rl.ok) return NextResponse.json({ error: "Slow down a little" }, { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } });
     return NextResponse.json(await fn(user));
   } catch (e) {

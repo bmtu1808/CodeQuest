@@ -3,7 +3,7 @@ import { getDb, schema } from "@/server/db/client";
 import { grade, GradingError, publicData, type QuestionResponse } from "@/features/learning/grader";
 import type { PublicQuestion, QuestionType } from "@/features/learning/types";
 import { XP_RULES, levelFromXp } from "@/features/gamification/xp";
-import { applyActivity, toLocalDay } from "@/features/gamification/streak";
+import { recordActivity } from "./activity";
 import { isLessonUnlocked } from "./path";
 import { awardXp } from "./xp";
 
@@ -230,26 +230,24 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
       breakdown.push({ label: "Perfect lesson", xp: XP_RULES.perfectBonus });
     }
 
-    // Streak (local calendar day of the user)
-    const today = toLocalDay(now, user.timezone);
-    const act = applyActivity({ current: stats.currentStreak, longest: stats.longestStreak, lastActiveDate: stats.lastActiveDate }, today);
-    if (act.extended) {
-      const bonus = XP_RULES.streakMilestones[act.state.current];
-      if (bonus && (await awardXp(tx, { userId, amount: bonus, reason: "streak_milestone", idempotencyKey: `streak:${act.state.current}` }))) {
-        breakdown.push({ label: `${act.state.current}-day streak`, xp: bonus });
-      }
-    }
-    const xpGained = breakdown.reduce((s, b) => s + b.xp, 0);
+    const act = await recordActivity(tx, {
+      userId,
+      timezone: user.timezone,
+      stats,
+      now,
+      baseXp: breakdown.reduce((sum, b) => sum + b.xp, 0),
+      lessons: 1,
+      questions: attempts?.n ?? 0,
+    });
+    if (act.bonus) breakdown.push(act.bonus);
+    const xpGained = breakdown.reduce((sum, b) => sum + b.xp, 0);
 
-    await tx
-      .update(schema.userStats)
-      .set({
-        currentStreak: act.state.current,
-        longestStreak: act.state.longest,
-        lastActiveDate: act.state.lastActiveDate,
-        lessonsCompleted: sql`${schema.userStats.lessonsCompleted} + ${firstTime ? 1 : 0}`,
-      })
-      .where(eq(schema.userStats.userId, userId));
+    if (firstTime) {
+      await tx
+        .update(schema.userStats)
+        .set({ lessonsCompleted: sql`${schema.userStats.lessonsCompleted} + 1` })
+        .where(eq(schema.userStats.userId, userId));
+    }
 
     if (progress) {
       await tx
@@ -275,18 +273,6 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
     }
 
     await tx
-      .insert(schema.userActivity)
-      .values({ userId, day: today, xp: xpGained, lessons: 1, questions: attempts?.n ?? 0 })
-      .onConflictDoUpdate({
-        target: [schema.userActivity.userId, schema.userActivity.day],
-        set: {
-          xp: sql`${schema.userActivity.xp} + ${xpGained}`,
-          lessons: sql`${schema.userActivity.lessons} + 1`,
-          questions: sql`${schema.userActivity.questions} + ${attempts?.n ?? 0}`,
-        },
-      });
-
-    await tx
       .update(schema.lessonRuns)
       .set({ status: "completed", completedAt: now, xpAwarded: xpGained })
       .where(eq(schema.lessonRuns.id, runId));
@@ -300,7 +286,7 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
       repeat: !firstTime,
       totalXp: after!.totalXp,
       level: { before: levelBefore.level, after: levelAfter.level, title: levelAfter.title, leveledUp: levelAfter.level > levelBefore.level },
-      streak: { current: act.state.current, extended: act.extended },
+      streak: act.streak,
     };
   });
 }

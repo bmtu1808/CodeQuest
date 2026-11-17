@@ -27,6 +27,18 @@ import {
 
 export const userRole = pgEnum("user_role", ["user", "content_editor", "admin"]);
 export const runStatus = pgEnum("run_status", ["in_progress", "completed", "abandoned"]);
+export const difficulty = pgEnum("difficulty", ["newbie", "easy", "medium", "hard", "expert"]);
+export const verdict = pgEnum("verdict", [
+  "pending",
+  "judging",
+  "accepted",
+  "wrong_answer",
+  "time_limit_exceeded",
+  "memory_limit_exceeded",
+  "compilation_error",
+  "runtime_error",
+  "internal_error",
+]);
 
 const timestamps = {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -298,6 +310,107 @@ export const userActivity = pgTable(
   (t) => [uniqueIndex("activity_user_day_uq").on(t.userId, t.day)],
 );
 
+// ───────────────────────── Competitive programming ─────────────────────────
+
+export type ProblemSample = { input: string; output: string; explanation?: string };
+
+export const problems = pgTable(
+  "problems",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull(),
+    title: text("title").notNull(),
+    statement: text("statement").notNull(),
+    inputFormat: text("input_format").notNull(),
+    outputFormat: text("output_format").notNull(),
+    constraints: text("constraints").notNull(),
+    difficulty: difficulty("difficulty").notNull(),
+    /** Reference Codeforces-style rating (800..2000+). Informational only. */
+    rating: integer("rating").notNull(),
+    tags: text("tags").array().notNull().default(sql`'{}'::text[]`),
+    timeLimitMs: integer("time_limit_ms").notNull().default(1000),
+    memoryLimitMb: integer("memory_limit_mb").notNull().default(256),
+    samples: jsonb("samples").$type<ProblemSample[]>().notNull(),
+    /** Exactly 3 hints, revealed one at a time on request. */
+    hints: jsonb("hints").$type<string[]>().notNull(),
+    /** Shown only after the learner has solved the problem. */
+    editorial: text("editorial").notNull(),
+    /** Shown only after the learner has solved the problem. */
+    referenceSolution: text("reference_solution").notNull(),
+    estimatedMinutes: integer("estimated_minutes").notNull().default(15),
+    published: boolean("published").notNull().default(true),
+    ...timestamps,
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("problems_slug_uq").on(t.slug), index("problems_difficulty_idx").on(t.difficulty, t.rating)],
+);
+
+export const problemTestCases = pgTable(
+  "problem_test_cases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    problemId: uuid("problem_id")
+      .notNull()
+      .references(() => problems.id, { onDelete: "cascade" }),
+    position: integer("position").notNull(),
+    /** Server-only. Hidden test data is never serialised to the client. */
+    input: text("input").notNull(),
+    expectedOutput: text("expected_output").notNull(),
+    isSample: boolean("is_sample").notNull().default(false),
+  },
+  (t) => [uniqueIndex("test_cases_problem_pos_uq").on(t.problemId, t.position)],
+);
+
+export const submissions = pgTable(
+  "submissions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    problemId: uuid("problem_id")
+      .notNull()
+      .references(() => problems.id, { onDelete: "cascade" }),
+    language: text("language").notNull(),
+    sourceCode: text("source_code").notNull(),
+    verdict: verdict("verdict").notNull().default("pending"),
+    timeMs: integer("time_ms"),
+    memoryKb: integer("memory_kb"),
+    testsPassed: integer("tests_passed").notNull().default(0),
+    testsTotal: integer("tests_total").notNull().default(0),
+    /** 1-based index of the first failing test (never its content). */
+    failedTest: integer("failed_test"),
+    compileOutput: text("compile_output"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    judgedAt: timestamp("judged_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("submissions_user_problem_idx").on(t.userId, t.problemId, t.createdAt),
+    index("submissions_problem_verdict_idx").on(t.problemId, t.verdict),
+    index("submissions_user_created_idx").on(t.userId, t.createdAt),
+  ],
+);
+
+export const userProblemProgress = pgTable(
+  "user_problem_progress",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    problemId: uuid("problem_id")
+      .notNull()
+      .references(() => problems.id, { onDelete: "cascade" }),
+    attempts: integer("attempts").notNull().default(0),
+    /** Highest hint level revealed (0..3). */
+    hintsUsed: integer("hints_used").notNull().default(0),
+    solved: boolean("solved").notNull().default(false),
+    solvedAt: timestamp("solved_at", { withTimezone: true }),
+    solvedWithoutHints: boolean("solved_without_hints").notNull().default(false),
+  },
+  (t) => [uniqueIndex("problem_progress_uq").on(t.userId, t.problemId), index("problem_progress_user_idx").on(t.userId, t.solved)],
+);
+
 // ───────────────────────── Relations ─────────────────────────
 
 export const worldsRelations = relations(worlds, ({ many }) => ({ units: many(units) }));
@@ -318,3 +431,5 @@ export type World = typeof worlds.$inferSelect;
 export type Unit = typeof units.$inferSelect;
 export type Lesson = typeof lessons.$inferSelect;
 export type LessonQuestion = typeof lessonQuestions.$inferSelect;
+export type Problem = typeof problems.$inferSelect;
+export type Submission = typeof submissions.$inferSelect;

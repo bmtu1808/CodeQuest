@@ -8,11 +8,11 @@ import { cn } from "@/lib/cn";
 const LIVE = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/learn", label: "Learn", icon: MapIcon },
+  { href: "/practice", label: "Practice", icon: Code2 },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ] as const;
 
 const SOON = [
-  { label: "Practice", icon: Code2, phase: "Phase 2" },
   { label: "Contests", icon: Swords, phase: "Phase 4" },
   { label: "Leaderboard", icon: Trophy, phase: "Phase 3" },
   { label: "Achievements", icon: Medal, phase: "Phase 3" },

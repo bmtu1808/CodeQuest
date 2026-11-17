@@ -14,15 +14,20 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:seed": "tsx scripts/seed.ts",
     "db:setup": "npm run db:migrate && npm run db:seed",
-    "content:verify": "tsx scripts/verify-content.ts"
+    "content:verify": "tsx scripts/verify-content.ts",
+    "db:seed:problems": "tsx scripts/seed-problems.ts",
+    "problems:verify": "tsx scripts/verify-problems.ts",
+    "postinstall": "node scripts/copy-monaco.mjs"
   },
   "dependencies": {
+    "@monaco-editor/react": "^4.7.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "drizzle-orm": "^0.45.4",
     "framer-motion": "^14.14.0",
     "geist": "^1.9.2",
     "lucide-react": "^1.73.0",
+    "monaco-editor": "^0.56.0",
     "next": "^16.4.6",
     "next-themes": "^0.4.6",
     "pg": "^8.23.1",
@@ -44,5 +49,8 @@
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
     "vitest": "^5.1.0"
+  },
+  "overrides": {
+    "dompurify": "3.4.18"
   }
 }

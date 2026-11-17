@@ -4,7 +4,7 @@ import nextTypescript from "eslint-config-next/typescript";
 const config = [
   ...nextCoreWebVitals,
   ...nextTypescript,
-  { ignores: [".next/**", "node_modules/**", "drizzle/**", "next-env.d.ts"] },
+  { ignores: [".next/**", "node_modules/**", "drizzle/**", "next-env.d.ts", "public/monaco/**"] },
   { rules: { "@typescript-eslint/no-explicit-any": "error" } },
 ];
 

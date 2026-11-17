@@ -2,7 +2,7 @@
 
 > Learn C++. Think Algorithmically. Become a Problem Solver.
 
-CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**.
+CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)** and **Phase 2 (coding practice)**.
 
 ## Status: what is real and what is not
 
@@ -20,12 +20,14 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 | Levels | 100-level curve with the titles from the spec. |
 | Streaks | Per-user local calendar day (timezone captured at sign-up), milestone bonuses. |
 | Profile | Stats and an activity calendar. |
+| Practice (Phase 2) | `/practice` list with difficulty/topic/status/search filters, and a workspace with a self-hosted Monaco editor (C++17/20, font size, reset, Ctrl+Enter run, Ctrl+Shift+Enter submit, local draft). **17 problems**, 229 tests, hints revealed 1 to 3, editorial and reference solution only after solving. Run checks samples (plus optional custom input); Submit judges all hidden tests. Hidden tests never leave the server. First accepted solve earns XP once through the ledger. |
+| Judge | Judge0 client (`src/server/judge/`). **Without `JUDGE0_URL` Run and Submit are disabled and say so; nothing is faked.** The client was tested against a Judge0-protocol fake backed by real `g++`, not against a live Judge0 server. |
 | Content | **World 1, C++ Foundations: 6 units, 18 lessons, 101 questions.** Every code sample is compiled with `g++`, and every "predict the output" answer is checked against the real program output (`npm run content:verify`). |
 
 **Not built yet (nothing fakes them; the UI marks them as roadmap)**
 
 - Worlds 2 to 6 have titles only and are stored unpublished ("Coming soon").
-- Coding playground, Monaco editor, Judge0 integration, problem database, submissions (Phase 2). Nothing is ever marked "Accepted" without a real judge.
+- More than 17 practice problems (the spec asks for 30+). Nothing is ever marked "Accepted" without a real judge.
 - Hearts, daily quests, achievements, leaderboards, notifications (Phase 3).
 - Contests, statistics page, recommendations, spaced repetition (Phase 4).
 - Admin CMS, social features (Phase 5). Content is currently authored in `src/content/` and loaded with `npm run db:seed`.
@@ -78,6 +80,8 @@ npm run dev          # http://localhost:3000
 | `npm run db:generate` | Generate a SQL migration after editing the schema |
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Upsert curriculum. Keeps learner progress |
+| `npm run db:seed:problems` | Compile reference solutions with `g++` and seed problems and tests (needs `g++` on the machine running it) |
+| `npm run problems:verify` | Re-checks every problem's samples and tests against its reference solution |
 
 ### Integration tests
 
@@ -87,6 +91,19 @@ They use a real database and **truncate users**, so point them at an empty, sepa
 sudo -u postgres psql -c "CREATE DATABASE codequest_test OWNER codequest;"
 TEST_DATABASE_URL=postgresql://codequest:YOUR_PASSWORD@localhost:5432/codequest_test npm test
 ```
+
+## Code judging (Judge0)
+
+Run a Judge0 CE instance (self-hosted with Docker, see the Judge0 docs) and set in `.env.local`:
+
+```
+JUDGE0_URL=http://localhost:2358
+# JUDGE0_AUTH_TOKEN=...            (if your instance requires one)
+# JUDGE0_RAPIDAPI_KEY / JUDGE0_RAPIDAPI_HOST  (for the RapidAPI-hosted version)
+# JUDGE0_CPP17_ID=54  JUDGE0_CPP20_ID=105     (language ids, defaults shown)
+```
+
+User code is never executed in the Next.js process. Run/Submit are rate limited per user, one judging at a time per user, and a judge failure is reported as an internal error rather than a verdict. Run `npm run db:seed:problems` once after `db:setup`.
 
 ## Architecture
 
@@ -117,7 +134,7 @@ Key design decisions:
 - All inputs validated with Zod. All SQL goes through Drizzle (parameterised).
 - Security headers are set in `next.config.ts`.
 - **Rate limiting is in-memory** (`src/server/rate-limit.ts`). On a multi-instance host such as Vercel it is per instance. Back it with Redis before relying on it in production.
-- No user code is executed anywhere in this MVP. When Phase 2 adds code execution it must run in an isolated judge (Judge0 or similar), never in the Next.js process.
+- User code runs only inside the external Judge0 sandbox, never in the Next.js process. Hidden test cases and expected outputs are never sent to the browser.
 - Secrets live only in `.env.local` (git-ignored). `.env.example` contains placeholders.
 
 ## Deploy
