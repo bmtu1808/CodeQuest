@@ -268,6 +268,9 @@ export const userStats = pgTable("user_stats", {
   /** Local calendar day (user timezone) of the last learning activity, YYYY-MM-DD. */
   lastActiveDate: date("last_active_date", { mode: "string" }),
   lessonsCompleted: integer("lessons_completed").notNull().default(0),
+  /** Stored hearts at `heartsUpdatedAt`. Regeneration is computed lazily (see features/gamification/hearts). */
+  hearts: integer("hearts").notNull().default(5),
+  heartsUpdatedAt: timestamp("hearts_updated_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()
@@ -291,6 +294,7 @@ export const xpTransactions = pgTable(
   (t) => [
     uniqueIndex("xp_user_idem_uq").on(t.userId, t.idempotencyKey),
     index("xp_user_created_idx").on(t.userId, t.createdAt),
+    index("xp_created_idx").on(t.createdAt),
   ],
 );
 
@@ -411,6 +415,85 @@ export const userProblemProgress = pgTable(
   (t) => [uniqueIndex("problem_progress_uq").on(t.userId, t.problemId), index("problem_progress_user_idx").on(t.userId, t.solved)],
 );
 
+// ───────────────────────── Gamification (Phase 3) ─────────────────────────
+
+export const dailyQuests = pgTable("daily_quests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  /** What is counted: see QUEST_METRICS in src/content/gamification.ts */
+  metric: text("metric").notNull(),
+  target: integer("target").notNull(),
+  rewardXp: integer("reward_xp").notNull().default(25),
+  icon: text("icon").notNull().default("Target"),
+  active: boolean("active").notNull().default(true),
+});
+
+/** A quest assigned to a user for one local day. Deadline = end of that local day. */
+export const userQuests = pgTable(
+  "user_quests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    questId: uuid("quest_id")
+      .notNull()
+      .references(() => dailyQuests.id, { onDelete: "cascade" }),
+    day: date("day", { mode: "string" }).notNull(),
+    progress: integer("progress").notNull().default(0),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("user_quest_day_uq").on(t.userId, t.questId, t.day), index("user_quest_user_day_idx").on(t.userId, t.day)],
+);
+
+export const achievements = pgTable("achievements", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull().unique(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  icon: text("icon").notNull().default("Medal"),
+  /** Which counter is compared with `threshold`: see ACHIEVEMENT_METRICS in src/content/gamification.ts */
+  metric: text("metric").notNull(),
+  threshold: integer("threshold").notNull(),
+  rewardXp: integer("reward_xp").notNull().default(0),
+  position: integer("position").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+});
+
+export const userAchievements = pgTable(
+  "user_achievements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    achievementId: uuid("achievement_id")
+      .notNull()
+      .references(() => achievements.id, { onDelete: "cascade" }),
+    unlockedAt: timestamp("unlocked_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("user_achievement_uq").on(t.userId, t.achievementId)],
+);
+
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    type: text("type").notNull(),
+    title: text("title").notNull(),
+    body: text("body").notNull().default(""),
+    href: text("href"),
+    readAt: timestamp("read_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+);
+
 // ───────────────────────── Relations ─────────────────────────
 
 export const worldsRelations = relations(worlds, ({ many }) => ({ units: many(units) }));
@@ -431,5 +514,8 @@ export type World = typeof worlds.$inferSelect;
 export type Unit = typeof units.$inferSelect;
 export type Lesson = typeof lessons.$inferSelect;
 export type LessonQuestion = typeof lessonQuestions.$inferSelect;
+export type DailyQuest = typeof dailyQuests.$inferSelect;
+export type Achievement = typeof achievements.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
 export type Problem = typeof problems.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;

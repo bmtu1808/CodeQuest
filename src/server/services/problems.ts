@@ -1,10 +1,12 @@
 import { and, asc, count, eq, ilike, isNull, sql, type SQL } from "drizzle-orm";
 import { getDb, schema } from "@/server/db/client";
 import { XP_RULES, levelFromXp } from "@/features/gamification/xp";
+import { toLocalDay } from "@/features/gamification/streak";
 import { aggregate, judgeOne, type TestVerdict } from "@/server/judge/checker";
 import { getJudge } from "@/server/judge";
 import { JudgeUnavailableError, type Language } from "@/server/judge/types";
 import { ServiceError } from "./lesson-run";
+import { trackEngagement, type Reward } from "./engagement";
 import { recordActivity } from "./activity";
 import { awardXp } from "./xp";
 
@@ -297,6 +299,8 @@ export type SubmitResult = {
   firstSolve: boolean;
   level: { before: number; after: number; title: string; leveledUp: boolean } | null;
   streak: { current: number; extended: boolean } | null;
+  /** Quests completed and achievements unlocked by this submission (their XP is included in xpGained). */
+  rewards: Reward[];
   tests: Array<{ index: number; verdict: TestVerdict; timeMs: number | null }>;
 };
 
@@ -364,7 +368,14 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
       .set({ attempts: sql`${schema.userProblemProgress.attempts} + 1` })
       .where(and(eq(schema.userProblemProgress.userId, userId), eq(schema.userProblemProgress.problemId, p.id)));
 
-    if (agg.verdict !== "accepted" || !stats || !prog) return { xpGained: 0, firstSolve: false, level: null, streak: null };
+    const [u] = await tx.select({ tz: schema.users.timezone }).from(schema.users).where(eq(schema.users.id, userId));
+    const timezone = u?.tz ?? "UTC";
+    if (!stats || !prog) return { xpGained: 0, firstSolve: false, level: null, streak: null, rewards: [] as Reward[] };
+    if (agg.verdict !== "accepted") {
+      // A judged-but-wrong submission is not a learning activity (no streak), but it counts for "submit N times" quests.
+      const eng = await trackEngagement(tx, { userId, timezone, day: toLocalDay(now, timezone), now, xpBefore: stats.totalXp, event: { submissions: 1 } });
+      return { xpGained: eng.xp, firstSolve: false, level: null, streak: null, rewards: eng.rewards };
+    }
 
     const before = levelFromXp(stats.totalXp);
     const firstSolve = !prog.solved;
@@ -381,7 +392,7 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
     }
     const act = await recordActivity(tx, {
       userId,
-      timezone: (await tx.select({ tz: schema.users.timezone }).from(schema.users).where(eq(schema.users.id, userId)))[0]?.tz ?? "UTC",
+      timezone,
       stats,
       now,
       baseXp: xp,
@@ -389,6 +400,17 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
       questions: 0,
     });
     xp += act.bonus?.xp ?? 0;
+    const easy = firstSolve && (p.difficulty === "newbie" || p.difficulty === "easy");
+    const medium = firstSolve && !easy;
+    const eng = await trackEngagement(tx, {
+      userId,
+      timezone,
+      day: act.day,
+      now,
+      xpBefore: stats.totalXp,
+      event: { submissions: 1, accepted: 1, problems_solved: firstSolve ? 1 : 0, easy_problems: easy ? 1 : 0, medium_problems: medium ? 1 : 0, xp },
+    });
+    xp += eng.xp;
     const [after] = await tx.select({ totalXp: schema.userStats.totalXp }).from(schema.userStats).where(eq(schema.userStats.userId, userId));
     const lvl = levelFromXp(after!.totalXp);
     return {
@@ -396,6 +418,7 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
       firstSolve,
       level: { before: before.level, after: lvl.level, title: lvl.title, leveledUp: lvl.level > before.level },
       streak: act.streak,
+      rewards: eng.rewards,
     };
   });
 

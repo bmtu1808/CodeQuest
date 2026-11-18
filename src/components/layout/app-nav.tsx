@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Home, Map as MapIcon, Medal, Swords, Trophy, User as UserIcon, Code2 } from "lucide-react";
+import { BarChart3, Code2, Home, Map as MapIcon, Medal, Swords, Target, Trophy, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -9,13 +9,17 @@ const LIVE = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/learn", label: "Learn", icon: MapIcon },
   { href: "/practice", label: "Practice", icon: Code2 },
+  { href: "/quests", label: "Quests", icon: Target },
+  { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/achievements", label: "Achievements", icon: Medal },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ] as const;
 
+/** The bottom bar only has room for five tabs. Quests and achievements are reached from the dashboard and profile. */
+const MOBILE = ["/dashboard", "/learn", "/practice", "/leaderboard", "/profile"];
+
 const SOON = [
   { label: "Contests", icon: Swords, phase: "Phase 4" },
-  { label: "Leaderboard", icon: Trophy, phase: "Phase 3" },
-  { label: "Achievements", icon: Medal, phase: "Phase 3" },
   { label: "Statistics", icon: BarChart3, phase: "Phase 4" },
 ] as const;
 
@@ -54,7 +58,7 @@ export function BottomNav() {
   const path = usePathname();
   return (
     <nav aria-label="Main" className="fixed inset-x-0 bottom-0 z-30 flex border-t-2 border-line bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden">
-      {LIVE.map(({ href, label, icon: Icon }) => {
+      {LIVE.filter((l) => MOBILE.includes(l.href)).map(({ href, label, icon: Icon }) => {
         const active = path === href || path.startsWith(`${href}/`);
         return (
           <Link key={href} href={href} aria-current={active ? "page" : undefined} className={cn("flex flex-1 flex-col items-center gap-0.5 py-2.5 text-[11px] font-extrabold uppercase", active ? "text-sky" : "text-muted")}>

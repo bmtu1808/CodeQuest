@@ -14,7 +14,7 @@ export async function handle(fn: (user: User) => Promise<unknown>, opts: { limit
     if (!rl.ok) return NextResponse.json({ error: "Slow down a little" }, { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } });
     return NextResponse.json(await fn(user));
   } catch (e) {
-    if (e instanceof ServiceError) return NextResponse.json({ error: e.message }, { status: e.status });
+    if (e instanceof ServiceError) return NextResponse.json({ error: e.message, code: e.code }, { status: e.status });
     if (e instanceof ZodError || e instanceof SyntaxError) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     console.error("[api] unexpected error", e);
     return NextResponse.json({ error: "Something went wrong" }, { status: 500 });

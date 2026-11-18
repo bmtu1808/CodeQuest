@@ -3,6 +3,8 @@ import { cache } from "react";
 import { getDb, schema } from "@/server/db/client";
 import type { User } from "@/server/db/schema";
 import { dailyGoalXp, levelFromXp, type LevelInfo } from "@/features/gamification/xp";
+import { getHearts, type HeartsView } from "./hearts";
+import { unreadCount } from "./notifications";
 import { addDays, effectiveStreak, streakAtRisk, toLocalDay } from "@/features/gamification/streak";
 
 export type Snapshot = {
@@ -15,6 +17,8 @@ export type Snapshot = {
   todayXp: number;
   dailyGoal: number;
   today: string;
+  hearts: HeartsView;
+  unread: number;
 };
 
 /** Header/sidebar numbers. Cached per request so layout + page share one query. */
@@ -41,6 +45,8 @@ export const getSnapshot = cache(async (user: User): Promise<Snapshot> => {
     todayXp: act?.xp ?? 0,
     dailyGoal: dailyGoalXp(user.dailyMinutes),
     today,
+    hearts: await getHearts(user.id),
+    unread: await unreadCount(user.id),
   };
 });
 

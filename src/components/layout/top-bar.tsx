@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { LogOut } from "lucide-react";
+import { Bell, LogOut } from "lucide-react";
 import { logoutAction } from "@/features/auth/actions";
+import { HeartsCounter } from "@/components/gamification/hearts-counter";
 import { StreakCounter, XpCounter } from "@/components/gamification/stat-pills";
 import { Avatar } from "@/components/ui/avatar";
 import { Logo } from "@/components/ui/logo";
@@ -16,11 +17,16 @@ export function TopBar({ user, snap }: { user: User; snap: Snapshot }) {
         <div className="ml-auto flex items-center gap-2 sm:gap-5">
           <XpCounter value={snap.totalXp} />
           <StreakCounter value={snap.streak} atRisk={snap.streakAtRisk} />
-          <ThemeToggle />
+          <HeartsCounter hearts={snap.hearts} />
+          <Link href="/notifications" aria-label={snap.unread ? `Notifications, ${snap.unread} unread` : "Notifications"} className="relative grid size-10 place-items-center rounded-xl text-muted transition hover:bg-surface-2">
+            <Bell size={22} />
+            {snap.unread > 0 && <span className="absolute right-1 top-1 grid min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-extrabold leading-4 text-white">{snap.unread > 9 ? "9+" : snap.unread}</span>}
+          </Link>
+          <ThemeToggle className="hidden sm:grid" />
           <Link href="/profile" aria-label="Your profile">
             <Avatar name={user.displayName} color={user.avatarColor} size={36} />
           </Link>
-          <form action={logoutAction}>
+          <form action={logoutAction} className="hidden sm:block">
             <button type="submit" aria-label="Log out" className="grid size-10 place-items-center rounded-xl text-muted transition hover:bg-surface-2">
               <LogOut size={20} />
             </button>

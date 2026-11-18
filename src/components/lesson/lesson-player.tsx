@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, X } from "lucide-react";
+import { Check, Heart, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { Toast } from "@/components/ui/toast";
@@ -17,10 +17,19 @@ import { QuestionView } from "./question-views";
 
 type Feedback = { correct: boolean; correctAnswer: string; explanation: string };
 
+class ApiError extends Error {
+  constructor(
+    message: string,
+    public code?: string,
+  ) {
+    super(message);
+  }
+}
+
 async function post<T>(url: string, body?: unknown): Promise<T> {
   const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
-  const data = (await res.json().catch(() => ({}))) as { error?: string };
-  if (!res.ok) throw new Error(data.error ?? "Request failed");
+  const data = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+  if (!res.ok) throw new ApiError(data.error ?? "Request failed", data.code);
   return data as T;
 }
 
@@ -37,6 +46,10 @@ export function LessonPlayer({ run }: { run: RunState }) {
   const [leaving, setLeaving] = useState(false);
   const [summary, setSummary] = useState<CompleteSummary | null>(null);
   const [attempt, setAttempt] = useState(0);
+  // Hearts only apply to a lesson you have not finished before. Replays are free practice.
+  const heartsApply = !run.alreadyCompleted;
+  const [hearts, setHearts] = useState(run.hearts.hearts);
+  const [noHearts, setNoHearts] = useState(heartsApply && run.hearts.hearts === 0 && run.resumed);
 
   const current = queue[0];
   const clearError = useCallback(() => setError(null), []);
@@ -45,11 +58,15 @@ export function LessonPlayer({ run }: { run: RunState }) {
     if (!current || !value || busy || feedback) return;
     setBusy(true);
     try {
-      const r = await post<{ correct: boolean; correctAnswer: string; explanation: string; mistakes: number }>(`/api/runs/${run.runId}/answer`, { questionId: current.id, response: value });
+      const r = await post<{ correct: boolean; correctAnswer: string; explanation: string; mistakes: number; hearts: { hearts: number } }>(`/api/runs/${run.runId}/answer`, { questionId: current.id, response: value });
       setFeedback({ correct: r.correct, correctAnswer: r.correctAnswer, explanation: r.explanation });
       setMistakes(r.mistakes);
+      setHearts(r.hearts.hearts);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not check your answer");
+      if (e instanceof ApiError && e.code === "out_of_hearts") {
+        setHearts(0);
+        setNoHearts(true);
+      } else setError(e instanceof Error ? e.message : "Could not check your answer");
     } finally {
       setBusy(false);
     }
@@ -58,6 +75,11 @@ export function LessonPlayer({ run }: { run: RunState }) {
   async function next() {
     if (!current || !feedback || busy) return;
     const rest = queue.slice(1);
+    if (!feedback.correct && heartsApply && hearts === 0) {
+      // Out of hearts: keep everything saved and let the learner recover instead of punishing them.
+      setNoHearts(true);
+      return;
+    }
     if (!feedback.correct) {
       // Missed questions come back at the end of the lesson (like Duolingo).
       setQueue([...rest, current]);
@@ -123,6 +145,11 @@ export function LessonPlayer({ run }: { run: RunState }) {
         <span className="whitespace-nowrap text-sm font-extrabold text-muted">
           {Math.min(correctCount + 1, run.total)}/{run.total}
         </span>
+        {heartsApply && (
+          <span className="flex items-center gap-1 font-extrabold text-danger" aria-label={`${hearts} hearts left`}>
+            <Heart size={22} fill={hearts > 0 ? "currentColor" : "none"} /> {hearts}
+          </span>
+        )}
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 pb-48 pt-4">
@@ -147,7 +174,7 @@ export function LessonPlayer({ run }: { run: RunState }) {
           {phase === "learn" ? (
             <>
               {run.alreadyCompleted && <p className="text-center text-xs text-muted">You have completed this lesson before. Replays are practice and earn no new XP, apart from a one-time Perfect bonus.</p>}
-              <Button size="lg" onClick={() => setPhase("quiz")} className="w-full sm:ml-auto sm:w-56">
+              <Button size="lg" onClick={() => (heartsApply && hearts === 0 ? setNoHearts(true) : setPhase("quiz"))} className="w-full sm:ml-auto sm:w-56">
                 Start quiz
               </Button>
             </>
@@ -162,6 +189,22 @@ export function LessonPlayer({ run }: { run: RunState }) {
           )}
         </div>
       </footer>
+
+      <Modal open={noHearts} onClose={() => setNoHearts(false)} title="You are out of hearts">
+        <p className="text-muted">No problem, nothing is lost. Your progress in this lesson is saved.</p>
+        <ul className="mt-3 list-disc pl-5 text-sm text-muted">
+          <li>A heart comes back every 30 minutes.</li>
+          <li>Replay a lesson you already finished: replays are free, and finishing one earns a heart.</li>
+        </ul>
+        <div className="mt-5 flex flex-col gap-3">
+          <ButtonLink href="/learn" size="lg" className="w-full">
+            Practice to earn a heart
+          </ButtonLink>
+          <Button size="lg" variant="outline" className="w-full" onClick={() => window.location.reload()}>
+            I waited, check again
+          </Button>
+        </div>
+      </Modal>
 
       <Modal open={leaving} onClose={() => setLeaving(false)} title="Leave this lesson?">
         <p className="text-muted">Your progress is saved. You can pick up right where you stopped.</p>

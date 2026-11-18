@@ -68,9 +68,19 @@ export function SubmitPanel({ result }: { result: SubmitResult }) {
       {result.compileOutput && <Pre>{result.compileOutput}</Pre>}
       {ok && result.firstSolve && (
         <p className="flex items-center gap-2 rounded-2xl bg-gold/20 px-3 py-2 font-extrabold text-gold-dark dark:text-gold">
-          <Zap size={18} fill="currentColor" /> +{result.xpGained} XP for solving this problem!
+          <Zap size={18} fill="currentColor" /> +{result.xpGained} XP earned!
           {result.level?.leveledUp && <span className="ml-auto text-grape-dark dark:text-grape">Level {result.level.after}</span>}
         </p>
+      )}
+      {result.rewards.length > 0 && (
+        <ul className="flex flex-col gap-1.5" aria-label="Rewards">
+          {result.rewards.map((r) => (
+            <li key={`${r.kind}:${r.slug}`} className="flex items-center gap-2 rounded-2xl bg-sky/10 px-3 py-2 text-sm font-extrabold text-sky">
+              {r.kind === "quest" ? "Quest complete" : "Achievement unlocked"}: {r.title}
+              {r.xp > 0 && <span className="ml-auto text-gold-dark dark:text-gold">+{r.xp} XP</span>}
+            </li>
+          ))}
+        </ul>
       )}
       {ok && !result.firstSolve && <p className="text-sm text-muted">Already solved before, so no additional XP.</p>}
       {result.verdict !== "compilation_error" && (

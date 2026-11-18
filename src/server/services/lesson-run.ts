@@ -4,6 +4,8 @@ import { grade, GradingError, publicData, type QuestionResponse } from "@/featur
 import type { PublicQuestion, QuestionType } from "@/features/learning/types";
 import { XP_RULES, levelFromXp } from "@/features/gamification/xp";
 import { recordActivity } from "./activity";
+import { trackEngagement, type Reward } from "./engagement";
+import { changeHearts, getHearts, type HeartsView } from "./hearts";
 import { isLessonUnlocked } from "./path";
 import { awardXp } from "./xp";
 
@@ -11,6 +13,7 @@ export class ServiceError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
   ) {
     super(message);
   }
@@ -43,6 +46,8 @@ export type RunState = {
   /** Questions not yet answered correctly in this run, in order. The answers are never included. */
   remaining: PublicQuestion[];
   alreadyCompleted: boolean;
+  /** Hearts only matter for a first-time lesson. Replays are unlimited practice. */
+  hearts: HeartsView;
 };
 
 /** Start a lesson or resume the in-progress run (survives reloads and logout). */
@@ -99,6 +104,7 @@ export async function startOrResumeRun(userId: string, lessonId: string): Promis
     resumed: resumed && (done.size > 0 || run.mistakes > 0),
     remaining: questions.filter((q) => !done.has(q.id)).map(toPublic),
     alreadyCompleted: (prior?.n ?? 0) > 0,
+    hearts: await getHearts(userId),
   };
 }
 
@@ -107,7 +113,16 @@ export type AnswerResult = {
   correctAnswer: string;
   explanation: string;
   mistakes: number;
+  hearts: HeartsView;
 };
+
+async function isFirstTime(userId: string, lessonId: string): Promise<boolean> {
+  const [prior] = await getDb()
+    .select({ n: schema.userLessonProgress.completions })
+    .from(schema.userLessonProgress)
+    .where(and(eq(schema.userLessonProgress.userId, userId), eq(schema.userLessonProgress.lessonId, lessonId)));
+  return (prior?.n ?? 0) === 0;
+}
 
 export async function answerQuestion(userId: string, runId: string, questionId: string, response: QuestionResponse): Promise<AnswerResult> {
   const db = getDb();
@@ -126,6 +141,12 @@ export async function answerQuestion(userId: string, runId: string, questionId: 
     .limit(1);
   if (!q) throw new ServiceError("Question not found", 404);
 
+  // Hearts: only a first-time lesson costs hearts. With none left the learner cannot answer, but nothing is lost:
+  // the run and every correct answer stay saved and can be continued when a heart is back.
+  const firstTime = await isFirstTime(userId, run.lessonId);
+  const heartsNow = await getHearts(userId);
+  if (firstTime && heartsNow.hearts === 0) throw new ServiceError("You are out of hearts. Your progress is saved.", 409, "out_of_hearts");
+
   let result;
   try {
     result = grade(q.type as QuestionType, q.data, q.answer, response);
@@ -140,9 +161,10 @@ export async function answerQuestion(userId: string, runId: string, questionId: 
     .from(schema.userQuestionAttempts)
     .where(and(eq(schema.userQuestionAttempts.runId, runId), eq(schema.userQuestionAttempts.questionId, questionId), eq(schema.userQuestionAttempts.isCorrect, true)))
     .limit(1);
-  if (already) return { correct: result.correct, correctAnswer: result.correctAnswer, explanation: q.explanation, mistakes: run.mistakes };
+  if (already) return { correct: result.correct, correctAnswer: result.correctAnswer, explanation: q.explanation, mistakes: run.mistakes, hearts: heartsNow };
 
   let mistakes = run.mistakes;
+  let hearts = heartsNow;
   await db.transaction(async (tx) => {
     await tx.insert(schema.userQuestionAttempts).values({ runId, userId, questionId, isCorrect: result.correct, response });
     if (!result.correct) {
@@ -152,9 +174,10 @@ export async function answerQuestion(userId: string, runId: string, questionId: 
         .where(eq(schema.lessonRuns.id, runId))
         .returning({ mistakes: schema.lessonRuns.mistakes });
       mistakes = u!.mistakes;
+      if (firstTime) hearts = await changeHearts(tx, userId, -1);
     }
   });
-  return { correct: result.correct, correctAnswer: result.correctAnswer, explanation: q.explanation, mistakes };
+  return { correct: result.correct, correctAnswer: result.correctAnswer, explanation: q.explanation, mistakes, hearts };
 }
 
 export type CompletionSummary = {
@@ -165,6 +188,10 @@ export type CompletionSummary = {
   totalXp: number;
   level: { before: number; after: number; title: string; leveledUp: boolean };
   streak: { current: number; extended: boolean };
+  /** Quests completed and achievements unlocked by this lesson (their XP is included in xpGained). */
+  rewards: Reward[];
+  heartsEarned: number;
+  hearts: HeartsView;
 };
 
 export async function completeRun(userId: string, runId: string): Promise<CompletionSummary> {
@@ -193,6 +220,9 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
         totalXp: stats.totalXp,
         level: { before: levelBefore.level, after: levelBefore.level, title: levelBefore.title, leveledUp: false },
         streak: { current: stats.currentStreak, extended: false },
+        rewards: [],
+        heartsEarned: 0,
+        hearts: await getHearts(userId),
       };
     }
     if (run.status !== "in_progress") throw new ServiceError("This lesson run was abandoned", 409);
@@ -240,7 +270,7 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
       questions: attempts?.n ?? 0,
     });
     if (act.bonus) breakdown.push(act.bonus);
-    const xpGained = breakdown.reduce((sum, b) => sum + b.xp, 0);
+    const learnXp = breakdown.reduce((sum, b) => sum + b.xp, 0);
 
     if (firstTime) {
       await tx
@@ -272,6 +302,28 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
       });
     }
 
+    // Review earns a heart back: replaying a lesson you already finished is how you refill (spec 8.4).
+    let heartsEarned = 0;
+    let heartsView: HeartsView;
+    if (!firstTime) {
+      const before = await getHearts(userId, now);
+      heartsView = await changeHearts(tx, userId, 1, now);
+      heartsEarned = heartsView.hearts > before.hearts ? 1 : 0;
+    } else heartsView = await getHearts(userId, now);
+
+    // Questions answered correctly in a replay count as "review" for quests.
+    const reviewQuestions = firstTime ? 0 : questions.length;
+    const eng = await trackEngagement(tx, {
+      userId,
+      timezone: user.timezone,
+      day: act.day,
+      now,
+      xpBefore: stats.totalXp,
+      event: { lessons: 1, perfect_lessons: perfect ? 1 : 0, xp: learnXp, review_questions: reviewQuestions },
+    });
+    for (const r of eng.rewards) breakdown.push({ label: `${r.kind === "quest" ? "Quest" : "Achievement"}: ${r.title}`, xp: r.xp });
+    const xpGained = breakdown.reduce((sum, b) => sum + b.xp, 0);
+
     await tx
       .update(schema.lessonRuns)
       .set({ status: "completed", completedAt: now, xpAwarded: xpGained })
@@ -287,6 +339,9 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
       totalXp: after!.totalXp,
       level: { before: levelBefore.level, after: levelAfter.level, title: levelAfter.title, leveledUp: levelAfter.level > levelBefore.level },
       streak: act.streak,
+      rewards: eng.rewards,
+      heartsEarned,
+      hearts: heartsView,
     };
   });
 }

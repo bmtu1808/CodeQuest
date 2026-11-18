@@ -3,6 +3,7 @@ import { and, eq, notInArray, sql } from "drizzle-orm";
 import { Pool } from "pg";
 import * as schema from "../src/server/db/schema";
 import { WORLDS } from "../src/content";
+import { ACHIEVEMENTS, QUESTS } from "../src/content/gamification";
 import { ROADMAP } from "../src/content/roadmap";
 import { loadEnvFiles } from "./load-env";
 
@@ -65,6 +66,15 @@ async function main() {
     await tx.update(worlds).set({ published: false }).where(notInArray(worlds.slug, all.map((w) => w.slug)));
   });
 
+  const { dailyQuests, achievements } = schema;
+  for (const q of QUESTS) {
+    await db.insert(dailyQuests).values(q).onConflictDoUpdate({ target: dailyQuests.slug, set: { title: q.title, description: q.description, metric: q.metric, target: q.target, rewardXp: q.rewardXp, icon: q.icon } });
+  }
+  for (const [i, a] of ACHIEVEMENTS.entries()) {
+    const v = { ...a, position: i };
+    await db.insert(achievements).values(v).onConflictDoUpdate({ target: achievements.slug, set: { title: v.title, description: v.description, metric: v.metric, threshold: v.threshold, rewardXp: v.rewardXp, icon: v.icon, position: v.position } });
+  }
+  console.log(`✔ ${QUESTS.length} daily quests, ${ACHIEVEMENTS.length} achievements`);
   console.log(`✔ seeded ${all.length} worlds (${WORLDS.length} playable), ${nLessons} lessons, ${nQuestions} questions`);
   await pool.end();
 }

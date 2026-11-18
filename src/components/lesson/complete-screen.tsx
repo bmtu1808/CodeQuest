@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Flame, PartyPopper, Trophy, Zap } from "lucide-react";
+import { Flame, Heart, PartyPopper, Trophy, Zap } from "lucide-react";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -14,6 +14,8 @@ export type CompleteSummary = {
   level: { before: number; after: number; title: string; leveledUp: boolean };
   streak: { current: number; extended: boolean };
   nextLessonId: string | null;
+  heartsEarned?: number;
+  rewards?: Array<{ kind: "quest" | "achievement"; title: string; xp: number }>;
 };
 
 export function CompleteScreen({ s, mistakes }: { s: CompleteSummary; mistakes: number }) {
@@ -53,6 +55,14 @@ export function CompleteScreen({ s, mistakes }: { s: CompleteSummary; mistakes: 
         </ul>
       ) : (
         <p className="text-sm text-muted">Replays are practice: no extra XP, but they still count for your daily streak.</p>
+      )}
+
+      {!!s.heartsEarned && (
+        <Card className="w-full border-danger/40 bg-danger/10">
+          <p className="flex items-center justify-center gap-2 font-black text-danger">
+            <Heart fill="currentColor" size={20} /> +{s.heartsEarned} heart earned by reviewing
+          </p>
+        </Card>
       )}
 
       {s.level.leveledUp && (

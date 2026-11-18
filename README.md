@@ -2,7 +2,7 @@
 
 > Learn C++. Think Algorithmically. Become a Problem Solver.
 
-CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)** and **Phase 2 (coding practice)**.
+CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**, **Phase 2 (coding practice)** and **Phase 3 (gamification)**.
 
 ## Status: what is real and what is not
 
@@ -22,13 +22,21 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 | Profile | Stats and an activity calendar. |
 | Practice (Phase 2) | `/practice` list with difficulty/topic/status/search filters, and a workspace with a self-hosted Monaco editor (C++17/20, font size, reset, Ctrl+Enter run, Ctrl+Shift+Enter submit, local draft). **17 problems**, 229 tests, hints revealed 1 to 3, editorial and reference solution only after solving. Run checks samples (plus optional custom input); Submit judges all hidden tests. Hidden tests never leave the server. First accepted solve earns XP once through the ledger. |
 | Judge | Judge0 client (`src/server/judge/`). **Without `JUDGE0_URL` Run and Submit are disabled and say so; nothing is faked.** The client was tested against a Judge0-protocol fake backed by real `g++`, not against a live Judge0 server. |
+| Hearts (Phase 3) | 5 hearts. A wrong answer in a **first-time** lesson costs one; one regenerates every 30 minutes (computed lazily from a timestamp, no cron). At 0 hearts nothing is lost: the run and every correct answer stay saved and the learner is offered recovery. Replaying a finished lesson is free and earns a heart back on completion. Constants in `src/features/gamification/hearts.ts` (admin-configurable in Phase 5). |
+| Daily quests | **12 quest definitions**, 3 assigned per learner per day (deterministic, distinct metrics). Progress comes from real events (lessons, review answers, judged submissions, XP). Each pays +25 XP once per quest per day through the ledger. Deadline is the end of the learner's local day. |
+| Achievements | **19 achievements** with real progress bars, each unlocked once and paid once. |
+| Leaderboard | Daily, weekly, monthly (UTC boundaries) and all-time, ranked by XP summed from the ledger. Because rewards are idempotent, replaying finished work cannot climb the board. Shows display name, username, level and XP only. |
+| Notifications | Bell with unread count, `/notifications` page. Created in the same transaction as the event (quest, achievement, level-up). |
+| Activity heatmap | 17-week calendar on the profile page, from `user_activity`. |
 | Content | **World 1, C++ Foundations: 6 units, 18 lessons, 101 questions.** Every code sample is compiled with `g++`, and every "predict the output" answer is checked against the real program output (`npm run content:verify`). |
 
 **Not built yet (nothing fakes them; the UI marks them as roadmap)**
 
 - Worlds 2 to 6 have titles only and are stored unpublished ("Coming soon").
 - More than 17 practice problems (the spec asks for 30+). Nothing is ever marked "Accepted" without a real judge.
-- Hearts, daily quests, achievements, leaderboards, notifications (Phase 3).
+- Friends leaderboard (needs the Phase 5 social features; the tab is shown disabled and labelled).
+- Streak freeze (optional in the spec, not built).
+- "Practice for 15 minutes" quests: time on task cannot be measured honestly, so no such quest exists.
 - Contests, statistics page, recommendations, spaced repetition (Phase 4).
 - Admin CMS, social features (Phase 5). Content is currently authored in `src/content/` and loaded with `npm run db:seed`.
 - Google OAuth and "forgot password" (need external services: Google credentials and an email provider).
@@ -79,7 +87,7 @@ npm run dev          # http://localhost:3000
 | `npm run content:verify` | Compiles and runs every C++ sample and checks marked answers |
 | `npm run db:generate` | Generate a SQL migration after editing the schema |
 | `npm run db:migrate` | Apply migrations |
-| `npm run db:seed` | Upsert curriculum. Keeps learner progress |
+| `npm run db:seed` | Upsert curriculum, daily quests and achievements. Keeps learner progress |
 | `npm run db:seed:problems` | Compile reference solutions with `g++` and seed problems and tests (needs `g++` on the machine running it) |
 | `npm run problems:verify` | Re-checks every problem's samples and tests against its reference solution |
 
@@ -104,6 +112,13 @@ JUDGE0_URL=http://localhost:2358
 ```
 
 User code is never executed in the Next.js process. Run/Submit are rate limited per user, one judging at a time per user, and a judge failure is reported as an internal error rather than a verdict. Run `npm run db:seed:problems` once after `db:setup`.
+
+### Known gaps and deliberate deviations in Phase 3
+
+- **Century** (solve 100 problems) exists but cannot be reached yet: the library has 17 problems.
+- **Bug Hunter** needs 5 "find the bug" questions instead of the spec's 10, because World 1 contains only 7 such questions. Raise the threshold in `src/content/gamification.ts` when more content exists.
+- Quest and achievement rewards are not counted by the "earn XP" quest, so they cannot chain into each other.
+- Leaderboard usernames are visible to all signed-in learners. A privacy toggle is not built yet.
 
 ## Architecture
 

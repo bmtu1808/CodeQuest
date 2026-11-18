@@ -1,11 +1,16 @@
 import type { Metadata } from "next";
-import { Flame, Sparkles, Target, Zap } from "lucide-react";
+import { Flame, Heart, Sparkles, Target, Trophy, Zap } from "lucide-react";
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { HeartsCounter } from "@/components/gamification/hearts-counter";
+import { QuestList } from "@/components/gamification/quest-list";
 import { WeekChart } from "@/components/dashboard/week-chart";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { requireUser } from "@/server/auth/session";
+import { getQuestsView } from "@/server/services/gamification-views";
+import { getLeaderboard } from "@/server/services/leaderboard";
 import { getLearningPath, nextLesson } from "@/server/services/path";
 import { getActivity, getRecentCompletions, getSnapshot } from "@/server/services/snapshot";
 
@@ -14,11 +19,13 @@ export const metadata: Metadata = { title: "Dashboard" };
 export default async function DashboardPage() {
   const user = await requireUser();
   if (!user.onboardingCompleted) redirect("/onboarding");
-  const [snap, path, week, recent] = await Promise.all([
-    getSnapshot(user),
+  const snap = await getSnapshot(user);
+  const [path, week, recent, quests, board] = await Promise.all([
     getLearningPath(user.id),
     getActivity(user, 7),
     getRecentCompletions(user.id),
+    getQuestsView(user.id, snap.today),
+    getLeaderboard(user.id, "weekly"),
   ]);
   const next = nextLesson(path);
   const nextUnit = path.flatMap((w) => w.units).find((u) => u.lessons.some((l) => l.id === next?.id));
@@ -83,6 +90,16 @@ export default async function DashboardPage() {
         </div>
 
         <Card>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-black">Daily quests</h2>
+            <Link href="/quests" className="text-xs font-extrabold uppercase text-sky hover:underline">
+              View all
+            </Link>
+          </div>
+          <QuestList quests={quests} />
+        </Card>
+
+        <Card>
           <h2 className="mb-4 text-lg font-black">This week</h2>
           <WeekChart days={week} today={snap.today} />
         </Card>
@@ -140,9 +157,43 @@ export default async function DashboardPage() {
             Open Learning Path
           </ButtonLink>
         </Card>
+        <Card>
+          <div className="flex items-center gap-2">
+            <Heart className="text-danger" size={20} fill="currentColor" />
+            <h2 className="text-lg font-black">Hearts</h2>
+            <HeartsCounter hearts={snap.hearts} className="ml-auto" />
+          </div>
+          <p className="mt-2 text-xs text-muted">A wrong answer in a new lesson costs a heart. One comes back every 30 minutes, or replay a finished lesson to earn one. Replays never cost hearts.</p>
+        </Card>
+        <Card>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Trophy className="text-gold" size={20} />
+              <h2 className="text-lg font-black">Weekly top</h2>
+            </div>
+            <Link href="/leaderboard" className="text-xs font-extrabold uppercase text-sky hover:underline">
+              Full board
+            </Link>
+          </div>
+          {board.rows.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">No XP earned this week yet. Be the first!</p>
+          ) : (
+            <ol className="mt-3 flex flex-col gap-1.5 text-sm">
+              {board.rows.slice(0, 3).map((r) => (
+                <li key={r.userId} className="flex justify-between gap-2">
+                  <span className={r.userId === user.id ? "font-extrabold text-sky" : "font-bold"}>
+                    {r.rank}. {r.displayName}
+                  </span>
+                  <span className="text-muted">{r.xp} XP</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 text-xs font-bold text-muted">{board.me.rank ? `You: #${board.me.rank}` : "You: not ranked yet"}</p>
+        </Card>
         <Card className="border-dashed">
-          <h2 className="text-sm font-black uppercase tracking-wide text-muted">Coming in later phases</h2>
-          <p className="mt-2 text-sm text-muted">Coding practice with a real judge, daily quests, achievements, leaderboards and contests are not built yet.</p>
+          <h2 className="text-sm font-black uppercase tracking-wide text-muted">Coming later</h2>
+          <p className="mt-2 text-sm text-muted">Contests, advanced statistics, friends and study groups are not built yet.</p>
         </Card>
       </aside>
     </div>

@@ -31,6 +31,9 @@ d("lesson engine (real database)", () => {
     svc = { run: await import("@/server/services/lesson-run"), path: await import("@/server/services/path") };
     const handle = db();
     await handle.execute(orm.sql`TRUNCATE users CASCADE`);
+    // These tests are about the lesson engine's own XP rules; quest/achievement rewards are covered in gamification.test.ts.
+    await handle.execute(orm.sql`update daily_quests set active = false`);
+    await handle.execute(orm.sql`update achievements set active = false`);
     const [u] = await handle.insert(schema.users).values({ email: "t@example.com", username: "tester", passwordHash: "x", displayName: "Tester", timezone: "UTC" }).returning();
     userId = u.id;
     await handle.insert(schema.userStats).values({ userId });

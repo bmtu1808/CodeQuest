@@ -1,4 +1,10 @@
 import type { Metadata } from "next";
+import { Medal } from "lucide-react";
+import Link from "next/link";
+import { logoutAction } from "@/features/auth/actions";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { Button } from "@/components/ui/button";
+import { getAchievementsView } from "@/server/services/gamification-views";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -10,7 +16,8 @@ export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const [snap, activity, recent] = await Promise.all([getSnapshot(user), getActivity(user, 119), getRecentCompletions(user.id, 8)]);
+  const [snap, activity, recent, ach] = await Promise.all([getSnapshot(user), getActivity(user, 119), getRecentCompletions(user.id, 8), getAchievementsView(user.id, user.timezone)]);
+  const unlocked = ach.filter((a) => a.unlockedAt);
   const stats = [
     { label: "Total XP", value: snap.totalXp.toLocaleString("en-US") },
     { label: "Level", value: snap.level.level },
@@ -43,6 +50,28 @@ export default async function ProfilePage() {
       </div>
 
       <Card>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-lg font-black">
+            <Medal className="text-gold" size={20} /> Achievements
+          </h2>
+          <Link href="/achievements" className="text-xs font-extrabold uppercase text-sky hover:underline">
+            {unlocked.length}/{ach.length} · View all
+          </Link>
+        </div>
+        {unlocked.length === 0 ? (
+          <p className="text-muted">None yet. Complete your first lesson to unlock First Steps.</p>
+        ) : (
+          <ul className="flex flex-wrap gap-2">
+            {unlocked.map((a) => (
+              <li key={a.slug} className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
+                {a.title}
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card>
         <h2 className="mb-3 text-lg font-black">Activity</h2>
         <Heatmap days={activity} />
       </Card>
@@ -61,6 +90,15 @@ export default async function ProfilePage() {
             ))}
           </ul>
         )}
+      </Card>
+      <Card className="flex items-center justify-between gap-3 sm:hidden">
+        <span className="font-bold">Theme</span>
+        <ThemeToggle />
+        <form action={logoutAction}>
+          <Button size="sm" variant="outline">
+            Log out
+          </Button>
+        </form>
       </Card>
     </div>
   );
