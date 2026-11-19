@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { schema } from "@/server/db/client";
 import { levelFromXp } from "@/features/gamification/xp";
+import { toLocalDay } from "@/features/gamification/streak";
 import { pickQuests } from "@/features/gamification/quests";
 import { QUESTS_PER_DAY, type AchievementMetric, type QuestMetric } from "@/content/gamification";
 import { notify } from "./notifications";
@@ -93,7 +94,14 @@ export async function achievementCounters(tx: Pick<Tx, "execute" | "select">, us
   const problems_solved = await one(sql`select count(*) as n from user_problem_progress where user_id = ${userId} and solved`);
   const hard_problems = await one(sql`select count(*) as n from user_problem_progress up join problems p on p.id = up.problem_id where up.user_id = ${userId} and up.solved and p.difficulty in ('hard','expert')`);
   const solved_no_hint = await one(sql`select count(*) as n from user_problem_progress where user_id = ${userId} and solved and solved_without_hints`);
-  const solved_in_day = await one(sql`select coalesce(max(c), 0) as n from (select count(*) c from user_problem_progress where user_id = ${userId} and solved and solved_at is not null group by (solved_at at time zone ${timezone})::date) t`);
+  // Grouped in code, not SQL: browsers report zone names (e.g. Asia/Saigon) that PostgreSQL may not know.
+  const solvedAt = await tx.execute(sql`select solved_at from user_problem_progress where user_id = ${userId} and solved and solved_at is not null`);
+  const perDay = new Map<string, number>();
+  for (const r of solvedAt.rows as Array<{ solved_at: Date | string }>) {
+    const day = toLocalDay(new Date(r.solved_at), timezone);
+    perDay.set(day, (perDay.get(day) ?? 0) + 1);
+  }
+  const solved_in_day = Math.max(0, ...perDay.values());
   const bugs_fixed = await one(sql`select count(distinct a.question_id) as n from user_question_attempts a join lesson_questions q on q.id = a.question_id where a.user_id = ${userId} and a.is_correct and q.type = 'find_bug'`);
   const quests_completed = await one(sql`select count(*) as n from user_quests where user_id = ${userId} and completed_at is not null`);
   const hello_world = await one(sql`select count(*) as n from user_problem_progress up join problems p on p.id = up.problem_id where up.user_id = ${userId} and up.solved and p.slug = 'hello-coder'`);

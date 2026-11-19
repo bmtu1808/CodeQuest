@@ -11,6 +11,7 @@ import { Toast } from "@/components/ui/toast";
 import { CodeBlock } from "@/components/lesson/code-block";
 import { cn } from "@/lib/cn";
 import type { ProblemDetail, RunResult, SubmissionRow, SubmitResult } from "@/server/services/problems";
+import { Countdown } from "@/components/contest/countdown";
 import { DifficultyBadge } from "./difficulty-badge";
 import { RichText } from "./rich-text";
 import { RunPanel, Spinner, SubmitPanel } from "./results-panel";
@@ -58,11 +59,15 @@ async function api<T>(url: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function ProblemWorkspace({ problem, submissions: initialSubs }: { problem: ProblemDetail; submissions: SubmissionRow[] }) {
+export type ContestInfo = { slug: string; title: string; label: string; mode: "live" | "virtual" | "practice"; endsAt: string | null };
+
+export function ProblemWorkspace({ problem, submissions: initialSubs, contest }: { problem: ProblemDetail; submissions: SubmissionRow[]; contest?: ContestInfo }) {
+  const base = contest ? `/api/contests/${contest.slug}/problems/${contest.label}` : `/api/problems/${problem.slug}`;
+  const storageSlug = contest ? `${contest.slug}:${contest.label}` : problem.slug;
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("problem");
   const [lang, setLang] = useState<Lang>("cpp17");
-  const [code, setCode] = useState(() => readStored(problem.slug, "cpp17"));
+  const [code, setCode] = useState(() => readStored(storageSlug, "cpp17"));
   const [fontSize, setFontSize] = useState(14);
   const [busy, setBusy] = useState<null | "run" | "submit">(null);
   const [run, setRun] = useState<RunResult | null>(null);
@@ -78,11 +83,11 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
 
   function changeCode(v: string) {
     setCode(v);
-    writeStored(problem.slug, lang, v);
+    writeStored(storageSlug, lang, v);
   }
   function changeLang(l: Lang) {
     setLang(l);
-    setCode(readStored(problem.slug, l));
+    setCode(readStored(storageSlug, l));
   }
 
   async function doRun() {
@@ -90,7 +95,7 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
     setBusy("run");
     setSub(null);
     try {
-      setRun(await api<RunResult>(`/api/problems/${problem.slug}/run`, { method: "POST", body: JSON.stringify({ source: code, language: lang, customInput: showCustom && custom ? custom : undefined }) }));
+      setRun(await api<RunResult>(`${base}/run`, { method: "POST", body: JSON.stringify({ source: code, language: lang, customInput: showCustom && custom ? custom : undefined }) }));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not run your code");
     } finally {
@@ -103,7 +108,7 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
     setBusy("submit");
     setRun(null);
     try {
-      const r = await api<SubmitResult>(`/api/problems/${problem.slug}/submit`, { method: "POST", body: JSON.stringify({ source: code, language: lang }) });
+      const r = await api<SubmitResult>(`${base}/submit`, { method: "POST", body: JSON.stringify({ source: code, language: lang }) });
       setSub(r);
       setSubs((s) => [{ id: r.submissionId, verdict: r.verdict, language: lang, timeMs: r.timeMs, memoryKb: r.memoryKb, testsPassed: r.passed, testsTotal: r.total, createdAt: new Date() }, ...s].slice(0, 10));
       if (r.verdict === "accepted") router.refresh(); // reload server data: editorial, XP in the header
@@ -129,7 +134,7 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
       const s = await api<{ sourceCode: string; language: Lang }>(`/api/problems/${problem.slug}/submissions/${id}`);
       setLang(s.language);
       setCode(s.sourceCode);
-      writeStored(problem.slug, s.language, s.sourceCode);
+      writeStored(storageSlug, s.language, s.sourceCode);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not load the submission");
     }
@@ -138,19 +143,33 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
   const tabs: Array<{ id: Tab; label: string }> = [
     { id: "problem", label: "Problem" },
     { id: "submissions", label: "Submissions" },
-    ...(problem.solved ? [{ id: "editorial" as Tab, label: "Editorial" }] : []),
+    ...(problem.solved && !contest ? [{ id: "editorial" as Tab, label: "Editorial" }] : []),
   ];
 
   return (
     <div className="flex min-h-dvh flex-col lg:h-dvh">
       <Toast message={error} onDone={clearError} />
       <header className="flex flex-wrap items-center gap-3 border-b-2 border-line bg-surface px-4 py-2.5">
-        <Link href="/practice" aria-label="Back to problems" className="grid size-9 place-items-center rounded-xl text-muted hover:bg-surface-2">
+        <Link href={contest ? `/contests/${contest.slug}` : "/practice"} aria-label={contest ? "Back to contest" : "Back to problems"} className="grid size-9 place-items-center rounded-xl text-muted hover:bg-surface-2">
           <ArrowLeft size={20} />
         </Link>
-        <h1 className="text-lg font-black">{problem.title}</h1>
+        <h1 className="text-lg font-black">
+          {contest ? `${contest.label}. ` : ""}
+          {problem.title}
+        </h1>
         <DifficultyBadge difficulty={problem.difficulty} rating={problem.rating} />
         {problem.solved && <span className="rounded-full bg-brand/15 px-2.5 py-0.5 text-xs font-extrabold uppercase text-brand-dark dark:text-brand">Solved</span>}
+        {contest && (
+          <span className="rounded-full bg-sky/15 px-2.5 py-0.5 text-xs font-extrabold uppercase text-sky">
+            {contest.title} · {contest.mode}
+            {contest.endsAt && (
+              <>
+                {" · "}
+                <Countdown target={contest.endsAt} doneText="time is up" />
+              </>
+            )}
+          </span>
+        )}
         <span className="ml-auto text-xs font-bold text-muted">
           {problem.timeLimitMs} ms · {problem.memoryLimitMb} MB
         </span>
@@ -205,6 +224,7 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
                     </span>
                   ))}
                 </div>
+                {!contest && (
                 <div className="rounded-2xl border-2 border-line p-4">
                   <h2 className="flex items-center gap-2 font-extrabold">
                     <Lightbulb size={18} className="text-gold" /> Hints
@@ -224,6 +244,7 @@ export function ProblemWorkspace({ problem, submissions: initialSubs }: { proble
                     </Button>
                   )}
                 </div>
+                )}
               </div>
             )}
             {tab === "submissions" && (

@@ -17,6 +17,8 @@
     "content:verify": "tsx scripts/verify-content.ts",
     "db:seed:problems": "tsx scripts/seed-problems.ts",
     "problems:verify": "tsx scripts/verify-problems.ts",
+    "contest:create": "tsx scripts/create-contest.ts",
+    "db:seed:contests": "tsx scripts/seed-contests.ts",
     "postinstall": "node scripts/copy-monaco.mjs"
   },
   "dependencies": {

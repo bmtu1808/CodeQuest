@@ -2,7 +2,7 @@
 
 > Learn C++. Think Algorithmically. Become a Problem Solver.
 
-CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**, **Phase 2 (coding practice)** and **Phase 3 (gamification)**.
+CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**, **Phase 2 (coding practice)** and **Phase 3 (gamification)** and **Phase 4 (advanced CP)**.
 
 ## Status: what is real and what is not
 
@@ -28,6 +28,13 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 | Leaderboard | Daily, weekly, monthly (UTC boundaries) and all-time, ranked by XP summed from the ledger. Because rewards are idempotent, replaying finished work cannot climb the board. Shows display name, username, level and XP only. |
 | Notifications | Bell with unread count, `/notifications` page. Created in the same transaction as the event (quest, achievement, level-up). |
 | Activity heatmap | 17-week calendar on the profile page, from `user_activity`. |
+| Contests (Phase 4) | Upcoming / live / past contests with countdown, ICPC scoring (solved, then penalty = minutes + 20 per wrong attempt), scoreboard recomputed from stored submissions, your submission history. Contest problems are hidden until the contest starts and stay locked in normal practice until it ends. Contest submissions never give XP, hints or practice progress. Time-window rules are enforced on the server. |
+| Virtual / practice contests | A finished contest can be replayed once in a personal window of the same length (shows where you would have placed; not rated) or practised without a timer (not on any scoreboard). |
+| Contest rating | Internal Elo-style rating (start 1500). Computed exactly once when a live contest ends (row lock + `rated_at`), only from live participants, with a notification and a ratings table. |
+| Statistics | Totals, acceptance rate, weekly and monthly activity, XP over time, problems solved per day, topic and difficulty distributions, heatmap. **Study time is not tracked, so it is not shown.** |
+| Topic mastery and weakness analysis | Mastery per problem tag = 60% success rate (solved vs attempted weight) + 40% coverage; lesson accuracy per unit. Text insights ("strong at X, needs practice with Y") are only generated when there is enough data, otherwise the page says so. |
+| Recommendations | Unsolved, open problems ranked by difficulty fit (a bit above your median solved rating) and topic need. Shown on the dashboard and statistics page with the reason. |
+| Spaced repetition | Every lesson question you answer correctly joins a review schedule (1 day, 3 days, then growing by ease; a miss retries in 10 minutes). `/review` serves only due questions, so reviews cannot be farmed. Reviews count for the streak and review quests but give no XP by themselves. |
 | Content | **World 1, C++ Foundations: 6 units, 18 lessons, 101 questions.** Every code sample is compiled with `g++`, and every "predict the output" answer is checked against the real program output (`npm run content:verify`). |
 
 **Not built yet (nothing fakes them; the UI marks them as roadmap)**
@@ -37,7 +44,6 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 - Friends leaderboard (needs the Phase 5 social features; the tab is shown disabled and labelled).
 - Streak freeze (optional in the spec, not built).
 - "Practice for 15 minutes" quests: time on task cannot be measured honestly, so no such quest exists.
-- Contests, statistics page, recommendations, spaced repetition (Phase 4).
 - Admin CMS, social features (Phase 5). Content is currently authored in `src/content/` and loaded with `npm run db:seed`.
 - Google OAuth and "forgot password" (need external services: Google credentials and an email provider).
 - Settings page. Light/dark theme toggle exists in the top bar.
@@ -88,6 +94,8 @@ npm run dev          # http://localhost:3000
 | `npm run db:generate` | Generate a SQL migration after editing the schema |
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Upsert curriculum, daily quests and achievements. Keeps learner progress |
+| `npm run db:seed:contests` | Demo contests (one finished, one upcoming) from the problem library, dated relative to now. Only when no contest exists |
+| `npm run contest:create -- <slug> "<title>" <startISO> <minutes> <problem-slug>...` | Create or update a contest (until Phase 5 adds an admin UI) |
 | `npm run db:seed:problems` | Compile reference solutions with `g++` and seed problems and tests (needs `g++` on the machine running it) |
 | `npm run problems:verify` | Re-checks every problem's samples and tests against its reference solution |
 
@@ -112,6 +120,14 @@ JUDGE0_URL=http://localhost:2358
 ```
 
 User code is never executed in the Next.js process. Run/Submit are rate limited per user, one judging at a time per user, and a judge failure is reported as an internal error rather than a verdict. Run `npm run db:seed:problems` once after `db:setup`.
+
+### Known gaps in Phase 4
+
+- Contests are created from the command line (`contest:create`); the admin UI is Phase 5. Contest scoring is ICPC only.
+- A user gets one virtual run per contest. People who registered but never submitted are not shown or rated.
+- No Codeforces integration (the spec says it can come later; the contest tables do not depend on it).
+- The statistics page has no study-time metric because time on task is not measured.
+- The recommendation and mastery models are simple, documented formulas, not machine learning.
 
 ### Known gaps and deliberate deviations in Phase 3
 

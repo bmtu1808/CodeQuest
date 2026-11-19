@@ -365,6 +365,113 @@ export const problemTestCases = pgTable(
   (t) => [uniqueIndex("test_cases_problem_pos_uq").on(t.problemId, t.position)],
 );
 
+// ───────────────────────── Contests (Phase 4) ─────────────────────────
+
+export const contests = pgTable(
+  "contests",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    slug: text("slug").notNull().unique(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    startsAt: timestamp("starts_at", { withTimezone: true }).notNull(),
+    durationMin: integer("duration_min").notNull(),
+    published: boolean("published").notNull().default(true),
+    /** Set once rating changes were computed for this contest (exactly once). */
+    ratedAt: timestamp("rated_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("contests_starts_idx").on(t.startsAt)],
+);
+
+export const contestProblems = pgTable(
+  "contest_problems",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contestId: uuid("contest_id")
+      .notNull()
+      .references(() => contests.id, { onDelete: "cascade" }),
+    problemId: uuid("problem_id")
+      .notNull()
+      .references(() => problems.id, { onDelete: "cascade" }),
+    /** A, B, C... */
+    label: text("label").notNull(),
+    position: integer("position").notNull(),
+  },
+  (t) => [uniqueIndex("contest_problem_label_uq").on(t.contestId, t.label), uniqueIndex("contest_problem_uq").on(t.contestId, t.problemId)],
+);
+
+/**
+ * mode "live": took part in the official time window (rated, official scoreboard)
+ * mode "virtual": replayed an old contest in a personal window of the same length (not rated)
+ * mode "practice": untimed practice on a finished contest (not rated, not on any scoreboard)
+ */
+export const contestParticipants = pgTable(
+  "contest_participants",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contestId: uuid("contest_id")
+      .notNull()
+      .references(() => contests.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    mode: text("mode").notNull(),
+    /** Virtual: when the personal window started. Otherwise the registration time. */
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("contest_participant_uq").on(t.contestId, t.userId, t.mode)],
+);
+
+export const userRatings = pgTable("user_ratings", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  rating: integer("rating").notNull().default(1500),
+  peak: integer("peak").notNull().default(1500),
+  contestsRated: integer("contests_rated").notNull().default(0),
+});
+
+export const ratingChanges = pgTable(
+  "rating_changes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    contestId: uuid("contest_id")
+      .notNull()
+      .references(() => contests.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    rank: integer("rank").notNull(),
+    oldRating: integer("old_rating").notNull(),
+    newRating: integer("new_rating").notNull(),
+  },
+  (t) => [uniqueIndex("rating_change_uq").on(t.contestId, t.userId)],
+);
+
+// ───────────────────────── Spaced repetition (Phase 4) ─────────────────────────
+
+export const questionReviews = pgTable(
+  "question_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    questionId: uuid("question_id")
+      .notNull()
+      .references(() => lessonQuestions.id, { onDelete: "cascade" }),
+    /** Ease factor x1000 (2500 = 2.5). */
+    easeMilli: integer("ease_milli").notNull().default(2500),
+    intervalDays: integer("interval_days").notNull().default(0),
+    repetitions: integer("repetitions").notNull().default(0),
+    lapses: integer("lapses").notNull().default(0),
+    dueAt: timestamp("due_at", { withTimezone: true }).notNull(),
+    lastReviewedAt: timestamp("last_reviewed_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("review_user_question_uq").on(t.userId, t.questionId), index("review_user_due_idx").on(t.userId, t.dueAt)],
+);
+
 export const submissions = pgTable(
   "submissions",
   {
@@ -385,10 +492,13 @@ export const submissions = pgTable(
     /** 1-based index of the first failing test (never its content). */
     failedTest: integer("failed_test"),
     compileOutput: text("compile_output"),
+    /** Set when the submission was made inside a contest (live, virtual or practice). */
+    contestParticipantId: uuid("contest_participant_id").references(() => contestParticipants.id, { onDelete: "set null" }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     judgedAt: timestamp("judged_at", { withTimezone: true }),
   },
   (t) => [
+    index("submissions_participant_idx").on(t.contestParticipantId),
     index("submissions_user_problem_idx").on(t.userId, t.problemId, t.createdAt),
     index("submissions_problem_verdict_idx").on(t.problemId, t.verdict),
     index("submissions_user_created_idx").on(t.userId, t.createdAt),
@@ -516,6 +626,7 @@ export type Lesson = typeof lessons.$inferSelect;
 export type LessonQuestion = typeof lessonQuestions.$inferSelect;
 export type DailyQuest = typeof dailyQuests.$inferSelect;
 export type Achievement = typeof achievements.$inferSelect;
+export type Contest = typeof contests.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type Problem = typeof problems.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;

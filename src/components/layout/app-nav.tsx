@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Code2, Home, Map as MapIcon, Medal, Swords, Target, Trophy, User as UserIcon } from "lucide-react";
+import { BarChart3, Brain, Code2, Home, Map as MapIcon, Medal, Swords, Target, Trophy, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -9,19 +9,17 @@ const LIVE = [
   { href: "/dashboard", label: "Home", icon: Home },
   { href: "/learn", label: "Learn", icon: MapIcon },
   { href: "/practice", label: "Practice", icon: Code2 },
+  { href: "/review", label: "Review", icon: Brain },
   { href: "/quests", label: "Quests", icon: Target },
+  { href: "/contests", label: "Contests", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   { href: "/achievements", label: "Achievements", icon: Medal },
+  { href: "/stats", label: "Statistics", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: UserIcon },
 ] as const;
 
 /** The bottom bar only has room for five tabs. Quests and achievements are reached from the dashboard and profile. */
-const MOBILE = ["/dashboard", "/learn", "/practice", "/leaderboard", "/profile"];
-
-const SOON = [
-  { label: "Contests", icon: Swords, phase: "Phase 4" },
-  { label: "Statistics", icon: BarChart3, phase: "Phase 4" },
-] as const;
+const MOBILE = ["/dashboard", "/learn", "/practice", "/contests", "/profile"];
 
 export function SidebarNav() {
   const path = usePathname();
@@ -43,13 +41,6 @@ export function SidebarNav() {
           </Link>
         );
       })}
-      <p className="mt-4 px-4 text-xs font-bold uppercase tracking-wider text-muted/70">Roadmap</p>
-      {SOON.map(({ label, icon: Icon, phase }) => (
-        <div key={label} aria-disabled className="flex cursor-not-allowed items-center gap-3 px-4 py-2.5 text-sm font-bold text-muted/60">
-          <Icon size={20} /> {label}
-          <span className="ml-auto rounded-full bg-surface-2 px-2 py-0.5 text-[10px] uppercase">{phase}</span>
-        </div>
-      ))}
     </nav>
   );
 }

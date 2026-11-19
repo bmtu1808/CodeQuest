@@ -19,6 +19,17 @@ const clip = (s: string, n = MAX_SHOWN) => (s.length > n ? `${s.slice(0, n)}\n..
 
 // ───────────────────────── list ─────────────────────────
 
+/**
+ * Problems of a contest that has not finished are closed for normal practice, so nobody can solve, hint or read an
+ * editorial for them ahead of time. They open automatically when the contest ends.
+ */
+const UNFINISHED_CONTEST = sql`exists (select 1 from contest_problems cp join contests c on c.id = cp.contest_id where cp.problem_id = problems.id and c.published and now() < c.starts_at + c.duration_min * interval '1 minute')`;
+
+async function assertPracticeOpen(problemId: string): Promise<void> {
+  const r = await getDb().execute(sql`select 1 from contest_problems cp join contests c on c.id = cp.contest_id where cp.problem_id = ${problemId} and c.published and now() < c.starts_at + c.duration_min * interval '1 minute' limit 1`);
+  if (r.rows.length) throw new ServiceError("This problem belongs to a contest that has not finished yet. It opens for practice when the contest ends.", 423);
+}
+
 export type ProblemFilters = { difficulty?: string; tag?: string; status?: string; q?: string; page?: number };
 export type ProblemRow = {
   slug: string;
@@ -37,7 +48,7 @@ export async function listProblems(userId: string, f: ProblemFilters): Promise<{
   const db = getDb();
   const P = schema.problems;
   const U = schema.userProblemProgress;
-  const where: SQL[] = [isNull(P.deletedAt), eq(P.published, true)];
+  const where: SQL[] = [isNull(P.deletedAt), eq(P.published, true), sql`not ${UNFINISHED_CONTEST}`];
   if (f.difficulty && (DIFFICULTIES as readonly string[]).includes(f.difficulty)) where.push(eq(P.difficulty, f.difficulty as Difficulty));
   if (f.tag) where.push(sql`${f.tag.slice(0, 40)} = ANY(${P.tags})`);
   if (f.q?.trim()) where.push(ilike(P.title, `%${f.q.trim().slice(0, 60).replace(/[%_\\]/g, "\\$&")}%`));
@@ -68,7 +79,7 @@ export async function listProblems(userId: string, f: ProblemFilters): Promise<{
     ? await db
         .select({ id: schema.submissions.problemId, total: count(), ok: sql<number>`count(*) filter (where ${schema.submissions.verdict} = 'accepted')` })
         .from(schema.submissions)
-        .where(sql`${schema.submissions.problemId} IN ${ids} AND ${schema.submissions.verdict} NOT IN ('pending','judging','internal_error')`)
+        .where(sql`${schema.submissions.problemId} IN ${ids} AND ${schema.submissions.contestParticipantId} IS NULL AND ${schema.submissions.verdict} NOT IN ('pending','judging','internal_error')`)
         .groupBy(schema.submissions.problemId)
     : [];
   const byId = new Map(stats.map((s) => [s.id, s]));
@@ -132,8 +143,9 @@ async function findProblem(slug: string) {
   return p;
 }
 
-export async function getProblem(userId: string, slug: string): Promise<ProblemDetail> {
+export async function getProblem(userId: string, slug: string, opts: { forContest?: boolean } = {}): Promise<ProblemDetail> {
   const p = await findProblem(slug);
+  if (!opts.forContest) await assertPracticeOpen(p.id);
   const [prog] = await getDb()
     .select()
     .from(schema.userProblemProgress)
@@ -188,7 +200,7 @@ export async function listSubmissions(userId: string, slug: string, limit = 10):
       createdAt: schema.submissions.createdAt,
     })
     .from(schema.submissions)
-    .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.problemId, p.id)))
+    .where(and(eq(schema.submissions.userId, userId), eq(schema.submissions.problemId, p.id), isNull(schema.submissions.contestParticipantId)))
     .orderBy(sql`${schema.submissions.createdAt} desc`)
     .limit(limit);
 }
@@ -198,6 +210,7 @@ export async function listSubmissions(userId: string, slug: string, limit = 10):
 /** Reveal hint `level` (1..3). Hints unlock in order; asking again for a revealed hint is free. */
 export async function revealHint(userId: string, slug: string, level: number): Promise<{ level: number; text: string }> {
   const p = await findProblem(slug);
+  await assertPracticeOpen(p.id);
   if (!Number.isInteger(level) || level < 1 || level > p.hints.length) throw new ServiceError("Unknown hint level", 400);
   const db = getDb();
   await db.insert(schema.userProblemProgress).values({ userId, problemId: p.id }).onConflictDoNothing();
@@ -239,6 +252,9 @@ async function withJudge<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Present when the call is made from inside a contest (the caller already checked the participant's window). */
+export type ContestCtx = { participantId: string };
+
 export type RunCase = {
   label: string;
   status: TestVerdict | "ran";
@@ -252,10 +268,11 @@ export type RunCase = {
 export type RunResult = { compileError: string | null; cases: RunCase[] };
 
 /** "Run Code": executes the public samples (plus an optional custom input). Nothing is stored, no XP. */
-export async function runSamples(userId: string, slug: string, sourceIn: unknown, languageIn: unknown, customInput?: unknown): Promise<RunResult> {
+export async function runSamples(userId: string, slug: string, sourceIn: unknown, languageIn: unknown, customInput?: unknown, ctx?: ContestCtx): Promise<RunResult> {
   void userId;
   const { source, language } = validateSource(sourceIn, languageIn);
   const p = await findProblem(slug);
+  if (!ctx) await assertPracticeOpen(p.id);
   const judge = requireJudge();
   let custom: string | null = null;
   if (customInput !== undefined && customInput !== null && customInput !== "") {
@@ -305,9 +322,10 @@ export type SubmitResult = {
 };
 
 /** "Submit": judges against ALL tests (samples + hidden). Accepted is only ever set from real judge results. */
-export async function submit(userId: string, slug: string, sourceIn: unknown, languageIn: unknown): Promise<SubmitResult> {
+export async function submit(userId: string, slug: string, sourceIn: unknown, languageIn: unknown, ctx?: ContestCtx): Promise<SubmitResult> {
   const { source, language } = validateSource(sourceIn, languageIn);
   const p = await findProblem(slug);
+  if (!ctx) await assertPracticeOpen(p.id);
   const judge = requireJudge();
   const db = getDb();
 
@@ -323,7 +341,7 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
 
   const [sub] = await db
     .insert(schema.submissions)
-    .values({ userId, problemId: p.id, language, sourceCode: source, verdict: "judging", testsTotal: tests.length })
+    .values({ userId, problemId: p.id, language, sourceCode: source, verdict: "judging", testsTotal: tests.length, contestParticipantId: ctx?.participantId ?? null })
     .returning({ id: schema.submissions.id });
   const submissionId = sub!.id;
 
@@ -355,6 +373,9 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
         judgedAt: now,
       })
       .where(eq(schema.submissions.id, submissionId));
+
+    // Contest submissions are scored by the contest only: no XP, hints, streak or practice progress.
+    if (ctx) return { xpGained: 0, firstSolve: false, level: null, streak: null, rewards: [] as Reward[] };
 
     await tx.insert(schema.userProblemProgress).values({ userId, problemId: p.id }).onConflictDoNothing();
     const [stats] = await tx.select().from(schema.userStats).where(eq(schema.userStats.userId, userId)).for("update");

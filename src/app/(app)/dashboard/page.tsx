@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Flame, Heart, Sparkles, Target, Trophy, Zap } from "lucide-react";
+import { Brain, Flame, Heart, Sparkles, Swords, Target, Trophy, Zap } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { HeartsCounter } from "@/components/gamification/hearts-counter";
@@ -9,6 +9,11 @@ import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import { requireUser } from "@/server/auth/session";
+import { DifficultyBadge } from "@/components/practice/difficulty-badge";
+import { Countdown } from "@/components/contest/countdown";
+import { getInsights } from "@/server/services/analytics";
+import { listContests } from "@/server/services/contests";
+import { getReviewOverview } from "@/server/services/reviews";
 import { getQuestsView } from "@/server/services/gamification-views";
 import { getLeaderboard } from "@/server/services/leaderboard";
 import { getLearningPath, nextLesson } from "@/server/services/path";
@@ -20,13 +25,17 @@ export default async function DashboardPage() {
   const user = await requireUser();
   if (!user.onboardingCompleted) redirect("/onboarding");
   const snap = await getSnapshot(user);
-  const [path, week, recent, quests, board] = await Promise.all([
+  const [path, week, recent, quests, board, insights, review, contests] = await Promise.all([
     getLearningPath(user.id),
     getActivity(user, 7),
     getRecentCompletions(user.id),
     getQuestsView(user.id, snap.today),
     getLeaderboard(user.id, "weekly"),
+    getInsights(user.id, 3),
+    getReviewOverview(user.id),
+    listContests(user.id),
   ]);
+  const nextContest = [...contests].filter((c) => c.phase !== "past").sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0];
   const next = nextLesson(path);
   const nextUnit = path.flatMap((w) => w.units).find((u) => u.lessons.some((l) => l.id === next?.id));
   const total = path.reduce((s, w) => s + w.total, 0);
@@ -88,6 +97,30 @@ export default async function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        <Card>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-lg font-black">Recommended problems</h2>
+            <Link href="/stats" className="text-xs font-extrabold uppercase text-sky hover:underline">
+              Why these?
+            </Link>
+          </div>
+          {insights.recommendations.length === 0 ? (
+            <p className="text-sm text-muted">You have solved every open problem. New ones will appear here.</p>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {insights.recommendations.map((r) => (
+                <li key={r.slug}>
+                  <Link href={`/practice/${r.slug}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border-2 border-line p-3 transition hover:border-sky/60">
+                    <span className="font-extrabold">{r.title}</span>
+                    <DifficultyBadge difficulty={r.difficulty} rating={r.rating} />
+                    <span className="w-full text-xs text-muted">{r.reason}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
 
         <Card>
           <div className="mb-3 flex items-center justify-between">
@@ -157,6 +190,39 @@ export default async function DashboardPage() {
             Open Learning Path
           </ButtonLink>
         </Card>
+        <Card className={review.due > 0 ? "border-grape/50 bg-grape/10" : ""}>
+          <div className="flex items-center gap-2">
+            <Brain className="text-grape" size={20} />
+            <h2 className="text-lg font-black">Review</h2>
+          </div>
+          {review.due > 0 ? (
+            <>
+              <p className="mt-2 text-sm font-bold">
+                {review.due} question{review.due === 1 ? "" : "s"} due now
+              </p>
+              <ButtonLink href="/review" prefetch={false} size="sm" className="mt-3 w-full">
+                Start review
+              </ButtonLink>
+            </>
+          ) : (
+            <p className="mt-2 text-sm text-muted">{review.scheduled === 0 ? "Questions you answer correctly in lessons come back here for spaced review." : "All caught up. Reviews come back at growing intervals."}</p>
+          )}
+        </Card>
+        {nextContest && (
+          <Card>
+            <div className="flex items-center gap-2">
+              <Swords className="text-sky" size={20} />
+              <h2 className="text-lg font-black">{nextContest.phase === "live" ? "Contest live" : "Next contest"}</h2>
+            </div>
+            <Link href={`/contests/${nextContest.slug}`} className="mt-2 block font-bold hover:underline">
+              {nextContest.title}
+            </Link>
+            <p className="text-xs text-muted">
+              {nextContest.phase === "live" ? "ends in " : "starts in "}
+              <Countdown target={(nextContest.phase === "live" ? nextContest.endsAt : nextContest.startsAt).toISOString()} />
+            </p>
+          </Card>
+        )}
         <Card>
           <div className="flex items-center gap-2">
             <Heart className="text-danger" size={20} fill="currentColor" />
@@ -193,7 +259,7 @@ export default async function DashboardPage() {
         </Card>
         <Card className="border-dashed">
           <h2 className="text-sm font-black uppercase tracking-wide text-muted">Coming later</h2>
-          <p className="mt-2 text-sm text-muted">Contests, advanced statistics, friends and study groups are not built yet.</p>
+          <p className="mt-2 text-sm text-muted">The admin CMS, friends and study groups are not built yet.</p>
         </Card>
       </aside>
     </div>

@@ -4,6 +4,8 @@ import Link from "next/link";
 import { logoutAction } from "@/features/auth/actions";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import { Button } from "@/components/ui/button";
+import { getMyRating } from "@/server/services/contests";
+import { ratingTitle } from "@/features/contest/rating";
 import { getAchievementsView } from "@/server/services/gamification-views";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
@@ -17,6 +19,7 @@ export const metadata: Metadata = { title: "Profile" };
 export default async function ProfilePage() {
   const user = await requireUser();
   const [snap, activity, recent, ach] = await Promise.all([getSnapshot(user), getActivity(user, 119), getRecentCompletions(user.id, 8), getAchievementsView(user.id, user.timezone)]);
+  const rating = await getMyRating(user.id);
   const unlocked = ach.filter((a) => a.unlockedAt);
   const stats = [
     { label: "Total XP", value: snap.totalXp.toLocaleString("en-US") },
@@ -24,6 +27,7 @@ export default async function ProfilePage() {
     { label: "Current streak", value: snap.streak },
     { label: "Longest streak", value: snap.longestStreak },
     { label: "Lessons completed", value: snap.lessonsCompleted },
+    { label: "Contest rating", value: rating ? `${rating.rating} · ${ratingTitle(rating.rating)}` : "Not rated" },
   ];
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
@@ -40,7 +44,7 @@ export default async function ProfilePage() {
         </div>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {stats.map((s) => (
           <Card key={s.label} className="p-4 text-center">
             <p className="text-2xl font-black">{s.value}</p>
@@ -95,7 +99,7 @@ export default async function ProfilePage() {
         <span className="font-bold">Theme</span>
         <ThemeToggle />
         <form action={logoutAction}>
-          <Button size="sm" variant="outline">
+          <Button type="submit" size="sm" variant="outline">
             Log out
           </Button>
         </form>

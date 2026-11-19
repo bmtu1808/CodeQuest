@@ -5,6 +5,7 @@ import type { PublicQuestion, QuestionType } from "@/features/learning/types";
 import { XP_RULES, levelFromXp } from "@/features/gamification/xp";
 import { recordActivity } from "./activity";
 import { trackEngagement, type Reward } from "./engagement";
+import { scheduleFirstReview } from "./reviews";
 import { changeHearts, getHearts, type HeartsView } from "./hearts";
 import { isLessonUnlocked } from "./path";
 import { awardXp } from "./xp";
@@ -19,7 +20,7 @@ export class ServiceError extends Error {
   }
 }
 
-const toPublic = (q: typeof schema.lessonQuestions.$inferSelect): PublicQuestion => ({
+export const toPublic = (q: typeof schema.lessonQuestions.$inferSelect): PublicQuestion => ({
   id: q.id,
   position: q.position,
   type: q.type as QuestionType,
@@ -167,6 +168,8 @@ export async function answerQuestion(userId: string, runId: string, questionId: 
   let hearts = heartsNow;
   await db.transaction(async (tx) => {
     await tx.insert(schema.userQuestionAttempts).values({ runId, userId, questionId, isCorrect: result.correct, response });
+    // A question answered correctly enters the learner's spaced-repetition schedule (first time only).
+    if (result.correct) await scheduleFirstReview(tx, userId, questionId, new Date());
     if (!result.correct) {
       const [u] = await tx
         .update(schema.lessonRuns)
