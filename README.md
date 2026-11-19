@@ -2,7 +2,7 @@
 
 > Learn C++. Think Algorithmically. Become a Problem Solver.
 
-CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**, **Phase 2 (coding practice)** and **Phase 3 (gamification)** and **Phase 4 (advanced CP)**.
+CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competitive programming. This repository contains **Phase 1 (MVP)**, **Phase 2 (coding practice)** and **Phase 3 (gamification)**, **Phase 4 (advanced CP)** and **Phase 5 (admin CMS, social, mobile, performance)**.
 
 ## Status: what is real and what is not
 
@@ -29,6 +29,9 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 | Notifications | Bell with unread count, `/notifications` page. Created in the same transaction as the event (quest, achievement, level-up). |
 | Activity heatmap | 17-week calendar on the profile page, from `user_activity`. |
 | Contests (Phase 4) | Upcoming / live / past contests with countdown, ICPC scoring (solved, then penalty = minutes + 20 per wrong attempt), scoreboard recomputed from stored submissions, your submission history. Contest problems are hidden until the contest starts and stay locked in normal practice until it ends. Contest submissions never give XP, hints or practice progress. Time-window rules are enforced on the server. |
+| Social (Phase 5) | Friends (request by username, accept/decline, auto-accept when both sides asked, remove), friends leaderboard (`/leaderboard?scope=friends`), study groups (invite code, max 50 members, 5 owned groups per user, group weekly leaderboard, owner can remove members or delete), per-problem and per-lesson discussions (threads and replies, plain text only, author or staff can delete, 8 posts per minute limit, problem discussions stay closed while the problem is in a running contest), public profiles at `/u/<username>` (XP, level, streak, solved count, achievements, rating; no email), and a privacy switch that hides you from the public leaderboards (friends and groups still see you). |
+| Admin CMS (Phase 5) | `/admin`, for roles `admin` and `content_editor`. Editors manage worlds, units, lessons, questions (7 types, validated by a dry-run grade so the stored answer is consistent and never leaks to learners), problems (draft, hints, editorial, hidden test cases pasted or uploaded as `.in`/`.out` pairs, publish needs at least one hidden test), contests (editable only until someone participates). Admins also manage users (role, deactivate which signs them out), XP rules (perfect bonus, first-solve XP by difficulty, streak milestones), quest and achievement on/off switches, the audit log and see an analytics overview (users, DAU/WAU/MAU, submissions, acceptance, hardest problems). Every change is written to `audit_log`. |
+| Mobile and resilience (Phase 5) | Responsive layouts checked at 375 px, web app manifest (installable to the home screen), error boundaries (`error.tsx`), `not-found`, loading skeletons. |
 | Virtual / practice contests | A finished contest can be replayed once in a personal window of the same length (shows where you would have placed; not rated) or practised without a timer (not on any scoreboard). |
 | Contest rating | Internal Elo-style rating (start 1500). Computed exactly once when a live contest ends (row lock + `rated_at`), only from live participants, with a notification and a ratings table. |
 | Statistics | Totals, acceptance rate, weekly and monthly activity, XP over time, problems solved per day, topic and difficulty distributions, heatmap. **Study time is not tracked, so it is not shown.** |
@@ -41,10 +44,8 @@ CodeQuest is a Duolingo-style web app for learning C++ and, eventually, competit
 
 - Worlds 2 to 6 have titles only and are stored unpublished ("Coming soon").
 - More than 17 practice problems (the spec asks for 30+). Nothing is ever marked "Accepted" without a real judge.
-- Friends leaderboard (needs the Phase 5 social features; the tab is shown disabled and labelled).
 - Streak freeze (optional in the spec, not built).
 - "Practice for 15 minutes" quests: time on task cannot be measured honestly, so no such quest exists.
-- Admin CMS, social features (Phase 5). Content is currently authored in `src/content/` and loaded with `npm run db:seed`.
 - Google OAuth and "forgot password" (need external services: Google credentials and an email provider).
 - Settings page. Light/dark theme toggle exists in the top bar.
 
@@ -95,7 +96,7 @@ npm run dev          # http://localhost:3000
 | `npm run db:migrate` | Apply migrations |
 | `npm run db:seed` | Upsert curriculum, daily quests and achievements. Keeps learner progress |
 | `npm run db:seed:contests` | Demo contests (one finished, one upcoming) from the problem library, dated relative to now. Only when no contest exists |
-| `npm run contest:create -- <slug> "<title>" <startISO> <minutes> <problem-slug>...` | Create or update a contest (until Phase 5 adds an admin UI) |
+| `npm run contest:create -- <slug> "<title>" <startISO> <minutes> <problem-slug>...` | Create or update a contest (the admin UI at `/admin/contests` does the same) |
 | `npm run db:seed:problems` | Compile reference solutions with `g++` and seed problems and tests (needs `g++` on the machine running it) |
 | `npm run problems:verify` | Re-checks every problem's samples and tests against its reference solution |
 
@@ -123,7 +124,7 @@ User code is never executed in the Next.js process. Run/Submit are rate limited 
 
 ### Known gaps in Phase 4
 
-- Contests are created from the command line (`contest:create`); the admin UI is Phase 5. Contest scoring is ICPC only.
+- Contests can be created in the admin UI or with `contest:create`. Contest scoring is ICPC only.
 - A user gets one virtual run per contest. People who registered but never submitted are not shown or rated.
 - No Codeforces integration (the spec says it can come later; the contest tables do not depend on it).
 - The statistics page has no study-time metric because time on task is not measured.
@@ -181,3 +182,13 @@ Key design decisions:
 - XP curve: 100 XP for level 2, each next level needs 20 XP more. Values live in `src/features/gamification/xp.ts` and are ready to move into an admin-configurable table.
 - Daily XP goal comes from the onboarding "minutes per day" answer (20/40/60/80 XP).
 - Lessons unlock strictly in order across the whole path.
+
+### Phase 5 notes and known gaps
+
+- **Roles.** New accounts are `user`. There is deliberately no sign-up path to a higher role. Promote the first admin in the database: `update users set role = 'admin' where username = '...';` Then use `/admin/users`.
+- **Seed vs CMS.** Anything edited in the CMS is marked `locked`. `npm run db:seed` and `db:seed:problems` never overwrite or retire locked rows, and CMS-created content is never retired by the seed.
+- **Not configurable in the CMS:** heart regeneration time (constant in code), quest and achievement titles/targets/rewards (code, re-applied by the seed; only on/off is editable), per-lesson XP is editable on the lesson. Lessons need at least one question to be playable.
+- **Discussions** have no reporting queue, likes, notifications or edit; moderation is delete only. Group chat does not exist.
+- **Performance.** Pages are server-rendered with indexed queries; XP rules are cached for 15 seconds per instance. No load test has been run, and there is no CDN, Redis or queue. Rate limiting for Run/Submit and auth is in memory per instance. Discussion flood control is database-backed.
+- **Mobile.** The manifest makes the site installable, but there is no service worker, so there is no offline mode and no push notifications.
+- Study time and "forgot password" / Google sign-in remain unbuilt (see above).

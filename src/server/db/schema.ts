@@ -70,6 +70,8 @@ export const users = pgTable(
     dailyMinutes: integer("daily_minutes").notNull().default(10),
     selfLevel: text("self_level"),
     recommendedWorldSlug: text("recommended_world_slug"),
+    /** Privacy: appear on the public leaderboards. */
+    showOnLeaderboard: boolean("show_on_leaderboard").notNull().default(true),
     ...timestamps,
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -106,6 +108,8 @@ export const worlds = pgTable(
     color: text("color").notNull().default("#58CC02"),
     position: integer("position").notNull(),
     published: boolean("published").notNull().default(false),
+    /** Edited in the admin CMS: `npm run db:seed` leaves locked rows alone so edits are never overwritten. */
+    locked: boolean("locked").notNull().default(false),
     ...timestamps,
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -125,6 +129,8 @@ export const units = pgTable(
     icon: text("icon").notNull().default("BookOpen"),
     position: integer("position").notNull(),
     published: boolean("published").notNull().default(false),
+    /** Edited in the admin CMS: `npm run db:seed` leaves locked rows alone so edits are never overwritten. */
+    locked: boolean("locked").notNull().default(false),
     ...timestamps,
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -156,6 +162,8 @@ export const lessons = pgTable(
     content: jsonb("content").$type<LessonContent>().notNull(),
     xpReward: integer("xp_reward").notNull().default(20),
     published: boolean("published").notNull().default(true),
+    /** Edited in the admin CMS: `npm run db:seed` leaves locked rows alone so edits are never overwritten. */
+    locked: boolean("locked").notNull().default(false),
     ...timestamps,
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -343,6 +351,8 @@ export const problems = pgTable(
     referenceSolution: text("reference_solution").notNull(),
     estimatedMinutes: integer("estimated_minutes").notNull().default(15),
     published: boolean("published").notNull().default(true),
+    /** Edited in the admin CMS: `npm run db:seed` leaves locked rows alone so edits are never overwritten. */
+    locked: boolean("locked").notNull().default(false),
     ...timestamps,
     deletedAt: timestamp("deleted_at", { withTimezone: true }),
   },
@@ -602,6 +612,117 @@ export const notifications = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [index("notifications_user_created_idx").on(t.userId, t.createdAt)],
+);
+
+// ───────────────────────── Platform (Phase 5) ─────────────────────────
+
+/** Admin-editable configuration (XP rules, heart regeneration...). */
+export const appSettings = pgTable("app_settings", {
+  key: text("key").primaryKey(),
+  value: jsonb("value").$type<unknown>().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/** Every change made through the admin area. */
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    actorId: uuid("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    targetType: text("target_type").notNull(),
+    targetId: text("target_id"),
+    meta: jsonb("meta").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("audit_created_idx").on(t.createdAt)],
+);
+
+export const friendships = pgTable(
+  "friendships",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    addresseeId: uuid("addressee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** pending | accepted */
+    status: text("status").notNull().default("pending"),
+    /** The two user ids sorted and joined, so a pair can only exist once in either direction. */
+    pairKey: text("pair_key").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("friendship_pair_uq").on(t.pairKey), index("friendship_addressee_idx").on(t.addresseeId, t.status)],
+);
+
+export const studyGroups = pgTable(
+  "study_groups",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    inviteCode: text("invite_code").notNull(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("study_group_code_uq").on(t.inviteCode)],
+);
+
+export const groupMembers = pgTable(
+  "group_members",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => studyGroups.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("member"),
+    joinedAt: timestamp("joined_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("group_member_uq").on(t.groupId, t.userId), index("group_member_user_idx").on(t.userId)],
+);
+
+/** A discussion thread attached to a problem or a lesson. Replies live in discussion_posts. */
+export const discussionThreads = pgTable(
+  "discussion_threads",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    /** "problem" | "lesson" */
+    scopeType: text("scope_type").notNull(),
+    scopeId: uuid("scope_id").notNull(),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("thread_scope_idx").on(t.scopeType, t.scopeId, t.createdAt)],
+);
+
+export const discussionPosts = pgTable(
+  "discussion_posts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    threadId: uuid("thread_id")
+      .notNull()
+      .references(() => discussionThreads.id, { onDelete: "cascade" }),
+    authorId: uuid("author_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }),
+  },
+  (t) => [index("post_thread_idx").on(t.threadId, t.createdAt)],
 );
 
 // ───────────────────────── Relations ─────────────────────────

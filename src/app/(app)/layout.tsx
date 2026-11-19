@@ -9,9 +9,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const snap = await getSnapshot(user);
   return (
     <div className="min-h-dvh">
-      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 border-r-2 border-line bg-surface p-4 lg:flex">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col gap-6 overflow-y-auto border-r-2 border-line bg-surface p-4 lg:flex">
         <Logo href="/dashboard" className="px-2 pt-2" />
-        <SidebarNav />
+        <SidebarNav isStaff={user.role === "admin" || user.role === "content_editor"} />
       </aside>
       <div className="lg:pl-64">
         <TopBar user={user} snap={snap} />

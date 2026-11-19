@@ -1,4 +1,5 @@
 import { and, asc, count, eq, isNull, sql } from "drizzle-orm";
+import { getXpRules } from "./settings";
 import { getDb, schema } from "@/server/db/client";
 import { grade, GradingError, publicData, type QuestionResponse } from "@/features/learning/grader";
 import type { PublicQuestion, QuestionType } from "@/features/learning/types";
@@ -255,12 +256,13 @@ export async function completeRun(userId: string, runId: string): Promise<Comple
     const breakdown: Array<{ label: string; xp: number }> = [];
     const ref = { refType: "lesson", refId: run.lessonId, userId } as const;
     const [lesson] = await tx.select().from(schema.lessons).where(eq(schema.lessons.id, run.lessonId)).limit(1);
+    const rules = await getXpRules();
     const base = lesson?.xpReward ?? XP_RULES.lessonComplete;
     if (firstTime && (await awardXp(tx, { ...ref, amount: base, reason: "lesson_complete", idempotencyKey: `lesson:${run.lessonId}:complete` }))) {
       breakdown.push({ label: "Lesson complete", xp: base });
     }
-    if (perfect && !progress?.perfected && (await awardXp(tx, { ...ref, amount: XP_RULES.perfectBonus, reason: "lesson_perfect", idempotencyKey: `lesson:${run.lessonId}:perfect` }))) {
-      breakdown.push({ label: "Perfect lesson", xp: XP_RULES.perfectBonus });
+    if (perfect && !progress?.perfected && (await awardXp(tx, { ...ref, amount: rules.perfectBonus, reason: "lesson_perfect", idempotencyKey: `lesson:${run.lessonId}:perfect` }))) {
+      breakdown.push({ label: "Perfect lesson", xp: rules.perfectBonus });
     }
 
     const act = await recordActivity(tx, {

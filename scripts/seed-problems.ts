@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { eq, notInArray } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 import { Pool } from "pg";
 import * as schema from "../src/server/db/schema";
 import { PROBLEMS } from "../src/content/problems";
@@ -48,8 +48,9 @@ async function main() {
       const [row] = await tx
         .insert(problems)
         .values({ slug: p.slug, ...values })
-        .onConflictDoUpdate({ target: problems.slug, set: values })
+        .onConflictDoUpdate({ target: problems.slug, set: values, setWhere: eq(problems.locked, false) })
         .returning({ id: problems.id });
+      if (!row) return; // edited in the admin CMS: leave the problem and its test cases alone
       await tx.delete(problemTestCases).where(eq(problemTestCases.problemId, row!.id));
       // insert in chunks to keep each statement small (some inputs are ~1 MB)
       for (let i = 0; i < built.tests.length; i += 4) {
@@ -60,7 +61,7 @@ async function main() {
     });
     console.log(`  ${p.slug}: ${built.tests.length} tests`);
   }
-  await db.update(problems).set({ published: false }).where(notInArray(problems.slug, PROBLEMS.map((p) => p.slug)));
+  await db.update(problems).set({ published: false }).where(and(eq(problems.locked, false), notInArray(problems.slug, PROBLEMS.map((p) => p.slug))));
   console.log(`✔ seeded ${PROBLEMS.length} problems, ${nTests} test cases`);
   await pool.end();
 }

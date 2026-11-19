@@ -170,6 +170,11 @@ export function ProblemWorkspace({ problem, submissions: initialSubs, contest }:
             )}
           </span>
         )}
+        {!contest && (
+          <Link href={`/discuss/problem/${problem.id}`} className="text-xs font-extrabold uppercase text-sky hover:underline">
+            Discussion
+          </Link>
+        )}
         <span className="ml-auto text-xs font-bold text-muted">
           {problem.timeLimitMs} ms · {problem.memoryLimitMb} MB
         </span>

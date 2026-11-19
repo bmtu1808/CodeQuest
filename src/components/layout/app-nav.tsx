@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, Brain, Code2, Home, Map as MapIcon, Medal, Swords, Target, Trophy, User as UserIcon } from "lucide-react";
+import { BarChart3, ShieldCheck, UsersRound, UserPlus, Brain, Code2, Home, Map as MapIcon, Medal, Swords, Target, Trophy, User as UserIcon } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/cn";
@@ -13,6 +13,8 @@ const LIVE = [
   { href: "/quests", label: "Quests", icon: Target },
   { href: "/contests", label: "Contests", icon: Swords },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
+  { href: "/friends", label: "Friends", icon: UserPlus },
+  { href: "/groups", label: "Groups", icon: UsersRound },
   { href: "/achievements", label: "Achievements", icon: Medal },
   { href: "/stats", label: "Statistics", icon: BarChart3 },
   { href: "/profile", label: "Profile", icon: UserIcon },
@@ -21,11 +23,12 @@ const LIVE = [
 /** The bottom bar only has room for five tabs. Quests and achievements are reached from the dashboard and profile. */
 const MOBILE = ["/dashboard", "/learn", "/practice", "/contests", "/profile"];
 
-export function SidebarNav() {
+export function SidebarNav({ isStaff = false }: { isStaff?: boolean }) {
   const path = usePathname();
+  const items = isStaff ? [...LIVE, { href: "/admin", label: "Admin", icon: ShieldCheck }] : LIVE;
   return (
     <nav aria-label="Main" className="flex flex-col gap-1">
-      {LIVE.map(({ href, label, icon: Icon }) => {
+      {items.map(({ href, label, icon: Icon }) => {
         const active = path === href || path.startsWith(`${href}/`);
         return (
           <Link

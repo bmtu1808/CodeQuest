@@ -3,6 +3,7 @@ import { Medal } from "lucide-react";
 import Link from "next/link";
 import { logoutAction } from "@/features/auth/actions";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
+import { setLeaderboardVisibilityAction } from "@/features/social/actions";
 import { Button } from "@/components/ui/button";
 import { getMyRating } from "@/server/services/contests";
 import { ratingTitle } from "@/features/contest/rating";
@@ -94,6 +95,24 @@ export default async function ProfilePage() {
             ))}
           </ul>
         )}
+      </Card>
+      <Card className="flex flex-wrap gap-3 text-sm font-extrabold uppercase">
+        <Link href="/friends" className="text-sky hover:underline">Friends</Link>
+        <Link href="/groups" className="text-sky hover:underline">Study groups</Link>
+        <Link href="/leaderboard" className="text-sky hover:underline">Leaderboard</Link>
+        <Link href="/achievements" className="text-sky hover:underline">Achievements</Link>
+        <Link href={`/u/${user.username}`} className="text-sky hover:underline">Public profile</Link>
+        {(user.role === "admin" || user.role === "content_editor") && <Link href="/admin" className="text-grape hover:underline">Admin</Link>}
+      </Card>
+      <Card className="flex items-center justify-between gap-3">
+        <div>
+          <p className="font-bold">Public leaderboard</p>
+          <p className="text-xs text-muted">{user.showOnLeaderboard ? "You appear on the public boards." : "You are hidden from public boards. Friends and groups still see you."}</p>
+        </div>
+        <form action={setLeaderboardVisibilityAction}>
+          <input type="hidden" name="show" value={user.showOnLeaderboard ? "0" : "1"} />
+          <Button type="submit" size="sm" variant="outline">{user.showOnLeaderboard ? "Hide me" : "Show me"}</Button>
+        </form>
       </Card>
       <Card className="flex items-center justify-between gap-3 sm:hidden">
         <span className="font-bold">Theme</span>

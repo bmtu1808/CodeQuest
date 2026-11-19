@@ -7,6 +7,7 @@ import { isPeriod, type Period } from "@/features/gamification/periods";
 import { cn } from "@/lib/cn";
 import { requireUser } from "@/server/auth/session";
 import { getLeaderboard } from "@/server/services/leaderboard";
+import { friendIds } from "@/server/services/social";
 
 export const metadata: Metadata = { title: "Leaderboard" };
 export const dynamic = "force-dynamic";
@@ -18,11 +19,13 @@ const TABS: Array<{ id: Period; label: string }> = [
   { id: "all", label: "All time" },
 ];
 
-export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ period?: string }> }) {
+export default async function LeaderboardPage({ searchParams }: { searchParams: Promise<{ period?: string; scope?: string }> }) {
   const sp = await searchParams;
   const period: Period = isPeriod(sp.period) ? sp.period : "weekly";
   const user = await requireUser();
-  const b = await getLeaderboard(user.id, period);
+  const friends = sp.scope === "friends";
+  const b = await getLeaderboard(user.id, period, new Date(), friends ? [user.id, ...(await friendIds(user.id))] : undefined);
+  const q = friends ? "&scope=friends" : "";
   const meInTop = b.rows.some((r) => r.userId === user.id);
   return (
     <div className="mx-auto max-w-2xl">
@@ -31,13 +34,13 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
 
       <div className="mt-5 flex flex-wrap gap-1.5" role="tablist" aria-label="Period">
         {TABS.map((t) => (
-          <Link key={t.id} role="tab" aria-selected={period === t.id} href={`/leaderboard?period=${t.id}`} className={cn("rounded-full border-2 px-4 py-1.5 text-xs font-extrabold uppercase", period === t.id ? "border-sky bg-sky/10 text-sky" : "border-line text-muted hover:bg-surface-2")}>
+          <Link key={t.id} role="tab" aria-selected={period === t.id} href={`/leaderboard?period=${t.id}${q}`} className={cn("rounded-full border-2 px-4 py-1.5 text-xs font-extrabold uppercase", period === t.id ? "border-sky bg-sky/10 text-sky" : "border-line text-muted hover:bg-surface-2")}>
             {t.label}
           </Link>
         ))}
-        <span title="Friends arrive with the social features (Phase 5)" aria-disabled className="flex cursor-not-allowed items-center gap-1 rounded-full border-2 border-dashed border-line px-4 py-1.5 text-xs font-extrabold uppercase text-muted/60">
-          <Users size={13} /> Friends · Phase 5
-        </span>
+        <Link href={`/leaderboard?period=${period}${friends ? "" : "&scope=friends"}`} aria-pressed={friends} className={cn("flex items-center gap-1 rounded-full border-2 px-4 py-1.5 text-xs font-extrabold uppercase", friends ? "border-grape bg-grape/10 text-grape" : "border-dashed border-line text-muted hover:bg-surface-2")}>
+          <Users size={13} /> {friends ? "Friends only" : "Friends"}
+        </Link>
       </div>
 
       {b.rows.length === 0 ? (
@@ -62,7 +65,7 @@ export default async function LeaderboardPage({ searchParams }: { searchParams: 
 
       {!meInTop && (
         <Card className="mt-4 border-sky/50 bg-sky/10 p-4 text-center font-bold">
-          {b.me.rank ? `You are #${b.me.rank} with ${b.me.xp.toLocaleString("en-US")} XP` : "You have no XP in this period yet. Complete a lesson to join the board."}
+          {b.me.hidden ? "You are hidden from the public board (see Profile). Friends and groups still see you." : b.me.rank ? `You are #${b.me.rank} with ${b.me.xp.toLocaleString("en-US")} XP` : "You have no XP in this period yet. Complete a lesson to join the board."}
         </Card>
       )}
       <p className="mt-6 text-xs text-muted">Only your display name, username, level and XP are shown here.</p>

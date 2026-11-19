@@ -1,6 +1,7 @@
 import { and, asc, count, eq, ilike, isNull, sql, type SQL } from "drizzle-orm";
+import { getXpRules } from "./settings";
 import { getDb, schema } from "@/server/db/client";
-import { XP_RULES, levelFromXp } from "@/features/gamification/xp";
+import { levelFromXp } from "@/features/gamification/xp";
 import { toLocalDay } from "@/features/gamification/streak";
 import { aggregate, judgeOne, type TestVerdict } from "@/server/judge/checker";
 import { getJudge } from "@/server/judge";
@@ -28,6 +29,12 @@ const UNFINISHED_CONTEST = sql`exists (select 1 from contest_problems cp join co
 async function assertPracticeOpen(problemId: string): Promise<void> {
   const r = await getDb().execute(sql`select 1 from contest_problems cp join contests c on c.id = cp.contest_id where cp.problem_id = ${problemId} and c.published and now() < c.starts_at + c.duration_min * interval '1 minute' limit 1`);
   if (r.rows.length) throw new ServiceError("This problem belongs to a contest that has not finished yet. It opens for practice when the contest ends.", 423);
+}
+
+/** False while the problem is locked inside a contest that has not finished. */
+export async function isProblemOpen(problemId: string): Promise<boolean> {
+  const r = await getDb().execute(sql`select 1 from contest_problems cp join contests c on c.id = cp.contest_id where cp.problem_id = ${problemId} and c.published and now() < c.starts_at + c.duration_min * interval '1 minute' limit 1`);
+  return r.rows.length === 0;
 }
 
 export type ProblemFilters = { difficulty?: string; tag?: string; status?: string; q?: string; page?: number };
@@ -170,7 +177,7 @@ export async function getProblem(userId: string, slug: string, opts: { forContes
     solved,
     editorial: solved ? p.editorial : null,
     referenceSolution: solved ? p.referenceSolution : null,
-    xpReward: XP_RULES.problem[p.difficulty] ?? 0,
+    xpReward: (await getXpRules()).problem[p.difficulty] ?? 0,
     judgeAvailable: getJudge() !== null,
   };
 }
@@ -408,7 +415,7 @@ export async function submit(userId: string, slug: string, sourceIn: unknown, la
     }
     let xp = 0;
     if (firstSolve) {
-      const amount = XP_RULES.problem[p.difficulty] ?? 0;
+      const amount = (await getXpRules()).problem[p.difficulty] ?? 0;
       if (await awardXp(tx, { userId, amount, reason: "problem_solved", idempotencyKey: `problem:${p.id}:solved`, refType: "problem", refId: p.id })) xp += amount;
     }
     const act = await recordActivity(tx, {

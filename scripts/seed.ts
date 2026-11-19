@@ -26,21 +26,25 @@ async function main() {
       const [wRow] = await tx
         .insert(worlds)
         .values({ slug: w.slug, title: w.title, description: w.description, icon: w.icon, color: w.color, position: wi + 1, published: w.published })
-        .onConflictDoUpdate({ target: worlds.slug, set: { title: w.title, description: w.description, icon: w.icon, color: w.color, position: wi + 1, published: w.published, deletedAt: null } })
+        .onConflictDoUpdate({ target: worlds.slug, set: { title: w.title, description: w.description, icon: w.icon, color: w.color, position: wi + 1, published: w.published, deletedAt: null }, setWhere: eq(worlds.locked, false) })
         .returning({ id: worlds.id });
+      // Rows edited in the admin CMS are locked: the seed never overwrites them.
+      const wId = wRow?.id ?? (await tx.select({ id: worlds.id }).from(worlds).where(eq(worlds.slug, w.slug)))[0]!.id;
       for (const [ui, u] of w.units.entries()) {
         const [uRow] = await tx
           .insert(units)
-          .values({ worldId: wRow!.id, slug: u.slug, title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true })
-          .onConflictDoUpdate({ target: [units.worldId, units.slug], set: { title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true, deletedAt: null } })
+          .values({ worldId: wId, slug: u.slug, title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true })
+          .onConflictDoUpdate({ target: [units.worldId, units.slug], set: { title: u.title, description: u.description, icon: u.icon, position: ui + 1, published: true, deletedAt: null }, setWhere: eq(units.locked, false) })
           .returning({ id: units.id });
+        const uId = uRow?.id ?? (await tx.select({ id: units.id }).from(units).where(and(eq(units.worldId, wId), eq(units.slug, u.slug))))[0]!.id;
         for (const [li, l] of u.lessons.entries()) {
           nLessons++;
           const [lRow] = await tx
             .insert(lessons)
-            .values({ unitId: uRow!.id, slug: l.slug, title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true })
-            .onConflictDoUpdate({ target: [lessons.unitId, lessons.slug], set: { title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true, deletedAt: null } })
+            .values({ unitId: uId, slug: l.slug, title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true })
+            .onConflictDoUpdate({ target: [lessons.unitId, lessons.slug], set: { title: l.title, summary: l.summary, position: li + 1, content: l.content, published: true, deletedAt: null }, setWhere: eq(lessons.locked, false) })
             .returning({ id: lessons.id });
+          if (!lRow) continue; // locked in the CMS: keep its edited questions as well
           // Park existing positions out of the way so reordering cannot violate the unique (lesson, position) index.
           await tx.update(lessonQuestions).set({ position: sql`${lessonQuestions.position} + 1000` }).where(eq(lessonQuestions.lessonId, lRow!.id));
           for (const [qi, q] of l.questions.entries()) {
@@ -63,7 +67,7 @@ async function main() {
       }
     }
     // Retire worlds that disappeared from the content files.
-    await tx.update(worlds).set({ published: false }).where(notInArray(worlds.slug, all.map((w) => w.slug)));
+    await tx.update(worlds).set({ published: false }).where(and(eq(worlds.locked, false), notInArray(worlds.slug, all.map((w) => w.slug))));
   });
 
   const { dailyQuests, achievements } = schema;

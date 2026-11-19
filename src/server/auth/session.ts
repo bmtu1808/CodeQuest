@@ -54,6 +54,15 @@ export async function requireUser(): Promise<User> {
   return user;
 }
 
+export type Role = User["role"];
+
+/** Pages and actions of the admin area. `content_editor` may manage content; `admin` may also manage users and settings. */
+export async function requireRole(...roles: Role[]): Promise<User> {
+  const user = await requireUser();
+  if (!roles.includes(user.role)) redirect("/dashboard");
+  return user;
+}
+
 /** Best-effort client identifier for rate limiting. */
 export async function clientKey(): Promise<string> {
   const h = await headers();

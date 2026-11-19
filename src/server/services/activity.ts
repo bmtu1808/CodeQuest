@@ -1,6 +1,6 @@
 import { eq, sql } from "drizzle-orm";
 import { schema } from "@/server/db/client";
-import { XP_RULES } from "@/features/gamification/xp";
+import { getXpRules } from "./settings";
 import { applyActivity, toLocalDay } from "@/features/gamification/streak";
 import { awardXp, type Tx } from "./xp";
 
@@ -27,7 +27,7 @@ export async function recordActivity(
   const act = applyActivity({ current: p.stats.currentStreak, longest: p.stats.longestStreak, lastActiveDate: p.stats.lastActiveDate }, day);
   let bonus: { label: string; xp: number } | null = null;
   if (act.extended) {
-    const xp = XP_RULES.streakMilestones[act.state.current];
+    const xp = (await getXpRules()).streakMilestones[act.state.current];
     if (xp && (await awardXp(tx, { userId: p.userId, amount: xp, reason: "streak_milestone", idempotencyKey: `streak:${act.state.current}` }))) {
       bonus = { label: `${act.state.current}-day streak`, xp };
     }
