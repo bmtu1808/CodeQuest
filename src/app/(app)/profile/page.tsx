@@ -7,7 +7,8 @@ import { setLeaderboardVisibilityAction } from "@/features/social/actions";
 import { Button } from "@/components/ui/button";
 import { getMyRating } from "@/server/services/contests";
 import { ratingTitle } from "@/features/contest/rating";
-import { getAchievementsView } from "@/server/services/gamification-views";
+import { MedalGrid } from "@/components/gamification/badge-grid";
+import { getAchievementsView, getBadgeCollection } from "@/server/services/gamification-views";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
@@ -20,7 +21,7 @@ export const metadata: Metadata = { title: "Profile" };
 
 export default async function ProfilePage() {
   const user = await requireUser();
-  const [snap, activity, recent, ach] = await Promise.all([getSnapshot(user), getActivity(user, 119), getRecentCompletions(user.id, 8), getAchievementsView(user.id, user.timezone)]);
+  const [snap, activity, recent, ach, badges] = await Promise.all([getSnapshot(user), getActivity(user, 119), getRecentCompletions(user.id, 8), getAchievementsView(user.id, user.timezone), getBadgeCollection(user.id)]);
   const rating = await getMyRating(user.id);
   const unlocked = ach.filter((a) => a.unlockedAt);
   const stats = [
@@ -75,14 +76,18 @@ export default async function ProfilePage() {
         {unlocked.length === 0 ? (
           <p className="text-muted">None yet. Complete your first lesson to unlock First Steps.</p>
         ) : (
-          <ul className="flex flex-wrap gap-2">
-            {unlocked.map((a, i) => (
-              <li key={a.slug} style={{ animationDelay: `${600 + i * 60}ms` }} className="animate-pop [animation-fill-mode:backwards] rounded-full transition-transform hover:-translate-y-0.5 hover:scale-105 bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
-                {a.title}
-              </li>
-            ))}
-          </ul>
+          <MedalGrid tone="gold" medals={unlocked.map((a) => ({ key: a.slug, title: a.title, description: a.description, icon: a.icon, earned: true }))} />
         )}
+      </Card>
+
+      <Card className="animate-rise [animation-delay:560ms]">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-lg font-black">Quest badges</h2>
+          <Link href="/quests" className="text-xs font-extrabold uppercase text-sky hover:underline">
+            {badges.filter((b) => b.times > 0).length}/{badges.length} · Daily quests
+          </Link>
+        </div>
+        <MedalGrid medals={badges.map((b) => ({ key: b.slug, title: b.title, description: b.description, icon: b.icon, earned: b.times > 0, times: b.times }))} />
       </Card>
 
       <Card className="animate-rise [animation-delay:650ms]">

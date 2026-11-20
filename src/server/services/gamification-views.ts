@@ -1,4 +1,4 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db/client";
 import { ACHIEVEMENT_METRICS, type AchievementMetric } from "@/content/gamification";
 import { achievementCounters, getTodayQuests } from "./engagement";
@@ -38,5 +38,26 @@ export async function getAchievementsView(userId: string, timezone: string): Pro
     current: Math.min(a.threshold, counters[a.metric as AchievementMetric] ?? 0),
     metricLabel: ACHIEVEMENT_METRICS[a.metric as AchievementMetric] ?? a.metric,
     unlockedAt: got.get(a.id) ?? null,
+  }));
+}
+
+export type BadgeView = { slug: string; title: string; description: string; icon: string; times: number; firstAt: Date | null };
+
+/** One collectible badge per daily quest. A badge is collected the first time its quest is completed; `times` counts repeats. */
+export async function getBadgeCollection(userId: string): Promise<BadgeView[]> {
+  const rows = await getDb().execute(sql`
+    select q.slug, q.title, q.description, q.icon, count(uq.id)::int as times, min(uq.completed_at) as first_at
+    from daily_quests q
+    left join user_quests uq on uq.quest_id = q.id and uq.user_id = ${userId} and uq.completed_at is not null
+    where q.active or uq.id is not null
+    group by q.id
+    order by (count(uq.id) = 0), min(uq.completed_at), q.slug`);
+  return (rows.rows as Array<{ slug: string; title: string; description: string; icon: string; times: number; first_at: string | Date | null }>).map((r) => ({
+    slug: r.slug,
+    title: r.title,
+    description: r.description,
+    icon: r.icon,
+    times: Number(r.times),
+    firstAt: r.first_at ? new Date(r.first_at) : null,
   }));
 }

@@ -1,3 +1,4 @@
+import { getBadgeCollection } from "./gamification-views";
 import { randomBytes } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db/client";
@@ -283,12 +284,13 @@ export async function getPublicProfile(username: string) {
   const [st] = await getDb().select().from(schema.userStats).where(eq(schema.userStats.userId, u.id));
   const solved = await getDb().execute(sql`select count(*)::int n from user_problem_progress where user_id = ${u.id} and solved`);
   const ach = await getDb()
-    .select({ title: schema.achievements.title })
+    .select({ title: schema.achievements.title, description: schema.achievements.description, icon: schema.achievements.icon })
     .from(schema.userAchievements)
     .innerJoin(schema.achievements, eq(schema.achievements.id, schema.userAchievements.achievementId))
     .where(eq(schema.userAchievements.userId, u.id))
     .orderBy(asc(schema.achievements.position));
   const rating = await getDb().select().from(schema.userRatings).where(eq(schema.userRatings.userId, u.id));
+  const badges = (await getBadgeCollection(u.id)).filter((b) => b.times > 0);
   return {
     id: u.id,
     username: u.username,
@@ -302,6 +304,9 @@ export async function getPublicProfile(username: string) {
     lessons: st?.lessonsCompleted ?? 0,
     solved: Number((solved.rows[0] as { n: number }).n),
     achievements: ach.map((a) => a.title),
+    achievementItems: ach,
+    badges,
+    longestStreak: st?.longestStreak ?? 0,
     rating: rating[0] && rating[0].contestsRated > 0 ? rating[0].rating : null,
   };
 }

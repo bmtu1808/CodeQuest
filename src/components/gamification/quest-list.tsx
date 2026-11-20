@@ -16,7 +16,7 @@ export function QuestList({ quests }: { quests: QuestItem[] }) {
               {done ? <CheckCircle2 size={26} /> : <DynamicIcon name={q.icon} size={26} />}
             </span>
             <div className="min-w-0 flex-1">
-              <p className="font-extrabold">{q.title}</p>
+              <p className="font-extrabold">{q.title}{done && <span className="ml-2 animate-pop rounded-full bg-grape px-2 py-0.5 align-middle text-[10px] font-black uppercase text-white">Badge collected</span>}</p>
               <p className="text-sm text-muted">{q.description}</p>
               <div className="mt-2 flex items-center gap-3">
                 <ProgressBar value={q.progress / q.target} label={`${q.title} progress`} className="h-3 flex-1" color={done ? "bg-brand" : "bg-sky"} />

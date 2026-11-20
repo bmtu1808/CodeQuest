@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { MedalGrid } from "@/components/gamification/badge-grid";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,7 +25,8 @@ export default async function PublicProfile({ params }: { params: Promise<{ user
   const stats = [
     ["Total XP", p.totalXp.toLocaleString("en-US")],
     ["Level", p.level.level],
-    ["Streak", p.streak],
+    ["Day streak", `🔥 ${p.streak}`],
+    ["Longest streak", p.longestStreak],
     ["Lessons", p.lessons],
     ["Problems solved", p.solved],
     ["Contest rating", p.rating ?? "Not rated"],
@@ -56,8 +58,14 @@ export default async function PublicProfile({ params }: { params: Promise<{ user
       </div>
       <Card>
         <h2 className="mb-3 text-lg font-black">Achievements</h2>
-        {p.achievements.length === 0 ? <p className="text-muted">None yet.</p> : (
-          <ul className="flex flex-wrap gap-2">{p.achievements.map((a) => <li key={a} className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">{a}</li>)}</ul>
+        {p.achievementItems.length === 0 ? <p className="text-muted">None yet.</p> : (
+          <MedalGrid tone="gold" medals={p.achievementItems.map((a) => ({ key: a.title, title: a.title, description: a.description, icon: a.icon, earned: true }))} />
+        )}
+      </Card>
+      <Card>
+        <h2 className="mb-3 text-lg font-black">Quest badges</h2>
+        {p.badges.length === 0 ? <p className="text-muted">None collected yet.</p> : (
+          <MedalGrid medals={p.badges.map((b) => ({ key: b.slug, title: b.title, description: b.description, icon: b.icon, earned: true, times: b.times }))} />
         )}
       </Card>
     </div>
