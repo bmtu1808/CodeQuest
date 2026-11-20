@@ -5,7 +5,8 @@ import { Field, inputCls, Notice } from "@/components/admin/ui";
 import { deleteContestAction, saveContestAction } from "@/features/admin/actions";
 import { requireRole } from "@/server/auth/session";
 import { getDb, schema } from "@/server/db/client";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
+import Link from "next/link";
 import { listContestsAdmin } from "@/server/services/admin";
 
 export const metadata: Metadata = { title: "Admin · Contests" };
@@ -15,9 +16,24 @@ export default async function ContestsAdmin({ searchParams }: { searchParams: Pr
   const me = await requireRole("admin", "content_editor");
   const rows = await listContestsAdmin(me);
   const cps = await getDb().select({ contestId: schema.contestProblems.contestId, slug: schema.problems.slug, position: schema.contestProblems.position }).from(schema.contestProblems).innerJoin(schema.problems, eq(schema.problems.id, schema.contestProblems.problemId)).orderBy(asc(schema.contestProblems.position));
+  const allProblems = await getDb().select({ slug: schema.problems.slug, title: schema.problems.title, published: schema.problems.published }).from(schema.problems).where(isNull(schema.problems.deletedAt)).orderBy(asc(schema.problems.title));
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-3xl font-black">Contests</h1>
+      <Card className="border-sky/40 bg-sky/10 text-sm">
+        <p className="font-extrabold">Want your own questions, inputs and outputs?</p>
+        <p className="mt-1 text-muted">
+          A contest is made of problems. First <Link href="/admin/problems/new" className="font-extrabold text-sky hover:underline">create a problem</Link> (statement, samples, hints), then open it to add test cases (input and expected output, by upload or paste). Then list its slug below.
+        </p>
+        <details className="mt-2">
+          <summary className="cursor-pointer text-xs font-extrabold uppercase text-sky">Available problem slugs ({allProblems.length})</summary>
+          <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+            {allProblems.map((x) => (
+              <li key={x.slug}><code className="rounded bg-surface-2 px-1">{x.slug}</code> <span className="text-xs text-muted">{x.title}{x.published ? "" : " (draft)"}</span></li>
+            ))}
+          </ul>
+        </details>
+      </Card>
       <p className="text-sm text-muted">Times are UTC. A contest with participants can no longer be edited, only unpublished. Problems are labelled A, B, C in the order given.</p>
       <Notice error={sp.error} saved={sp.saved} />
       {rows.map((c) => (
