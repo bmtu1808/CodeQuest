@@ -19,18 +19,19 @@ const LABEL: Record<PathLesson["state"], string> = {
 };
 const ICON = { locked: Lock, available: Star, in_progress: Play, completed: Check, perfected: Crown } as const;
 
-export function LessonNode({ lesson, offset }: { lesson: PathLesson; offset: number }) {
+export function LessonNode({ lesson, offset, index = 0 }: { lesson: PathLesson; offset: number; index?: number }) {
   const Icon = ICON[lesson.state];
   const locked = lesson.state === "locked";
   const body = (
     <>
       <span
+        style={{ animationDelay: `${200 + index * 80}ms` }}
         className={cn(
-          "relative grid size-[72px] place-items-center rounded-full border-b-[7px] transition active:translate-y-[3px] active:border-b-[3px]",
+          "relative grid size-[72px] animate-pop [animation-fill-mode:backwards] place-items-center rounded-full border-b-[7px] transition hover:scale-110 active:translate-y-[3px] active:border-b-[3px]",
           STYLE[lesson.state],
-          lesson.state === "available" && "animate-float",
         )}
       >
+        {(lesson.state === "available" || lesson.state === "in_progress") && <span aria-hidden className="absolute inset-0 animate-ping rounded-full bg-current opacity-20" />}
         <Icon size={30} fill={lesson.state === "available" || lesson.state === "completed" ? "currentColor" : "none"} strokeWidth={2.5} />
       </span>
       <span className="mt-2 max-w-[11rem] text-center text-sm font-extrabold leading-tight">{lesson.title}</span>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { HeartsCounter } from "@/components/gamification/hearts-counter";
 import { QuestList } from "@/components/gamification/quest-list";
+import { CountUp } from "@/components/profile/count-up";
 import { WeekChart } from "@/components/dashboard/week-chart";
 import { ButtonLink } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -45,7 +46,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
-      <div className="flex flex-col gap-6">
+      <div className="stagger flex flex-col gap-6">
         <div>
           <h1 className="text-3xl font-black">{firstTime ? `Welcome, ${user.displayName.split(" ")[0]}!` : "Welcome back, Programmer!"}</h1>
           <p className="mt-1 text-muted">
@@ -59,7 +60,7 @@ export default async function DashboardPage() {
               <p className="text-xs font-extrabold uppercase tracking-widest text-brand-dark dark:text-brand">{nextUnit?.title ?? "Next lesson"}</p>
               <h2 className="mt-1 text-2xl font-black">{next.title}</h2>
               <p className="mt-1 max-w-md text-muted">{next.summary}</p>
-              <ButtonLink href={`/lesson/${next.id}`} prefetch={false} size="lg" className="mt-5">
+              <ButtonLink href={`/lesson/${next.id}`} prefetch={false} size="lg" className="mt-5 animate-float">
                 {next.state === "in_progress" ? "Continue Learning" : firstTime ? "Start Learning" : "Continue Learning"}
               </ButtonLink>
             </>
@@ -75,24 +76,24 @@ export default async function DashboardPage() {
         </Card>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="flex items-center gap-3 p-4">
-            <Zap className="text-gold" fill="currentColor" />
+          <Card className="flex items-center gap-3 p-4 transition-transform duration-200 hover:-translate-y-1">
+            <Zap className="animate-pop text-gold" fill="currentColor" />
             <div>
-              <p className="text-2xl font-black leading-none">{snap.totalXp.toLocaleString("en-US")}</p>
+              <p className="text-2xl font-black leading-none"><CountUp value={snap.totalXp} /></p>
               <p className="text-xs font-bold uppercase text-muted">Total XP</p>
             </div>
           </Card>
-          <Card className="flex items-center gap-3 p-4">
-            <Flame className="text-tangerine" fill="currentColor" />
+          <Card className="flex items-center gap-3 p-4 transition-transform duration-200 hover:-translate-y-1">
+            <Flame className={`origin-bottom text-tangerine ${snap.streak > 0 ? "animate-wiggle" : ""}`} fill="currentColor" />
             <div>
-              <p className="text-2xl font-black leading-none">{snap.streak}</p>
+              <p className="text-2xl font-black leading-none"><CountUp value={snap.streak} /></p>
               <p className="text-xs font-bold uppercase text-muted">Day streak</p>
             </div>
           </Card>
-          <Card className="flex items-center gap-3 p-4">
+          <Card className="flex items-center gap-3 p-4 transition-transform duration-200 hover:-translate-y-1">
             <Sparkles className="text-grape" />
             <div>
-              <p className="text-2xl font-black leading-none">{snap.lessonsCompleted}</p>
+              <p className="text-2xl font-black leading-none"><CountUp value={snap.lessonsCompleted} /></p>
               <p className="text-xs font-bold uppercase text-muted">Lessons done</p>
             </div>
           </Card>
@@ -159,13 +160,13 @@ export default async function DashboardPage() {
         </Card>
       </div>
 
-      <aside className="flex flex-col gap-6">
+      <aside className="stagger flex flex-col gap-6">
         <Card>
           <div className="flex items-baseline justify-between">
             <h2 className="text-lg font-black">Level {snap.level.level}</h2>
             <span className="text-sm font-bold text-muted">{snap.level.title}</span>
           </div>
-          <ProgressBar value={snap.level.progress} className="mt-3" color="bg-grape" label="Level progress" />
+          <ProgressBar value={snap.level.progress} className="mt-3 [&>div]:origin-left [&>div]:animate-grow" color="bg-grape" label="Level progress" />
           <p className="mt-2 text-xs font-bold text-muted">
             {snap.level.isMax ? "Max level reached" : `${snap.level.xpIntoLevel} / ${snap.level.xpForNext} XP to level ${snap.level.level + 1}`}
           </p>
@@ -175,14 +176,14 @@ export default async function DashboardPage() {
             <Target className="text-sky" size={20} />
             <h2 className="text-lg font-black">Daily goal</h2>
           </div>
-          <ProgressBar value={goalPct} className="mt-3" color="bg-sky" label="Daily XP goal" />
+          <ProgressBar value={goalPct} className="mt-3 [&>div]:origin-left [&>div]:animate-grow" color="bg-sky" label="Daily XP goal" />
           <p className="mt-2 text-xs font-bold text-muted">
             {snap.todayXp} / {snap.dailyGoal} XP today {goalPct >= 1 && "· Goal reached!"}
           </p>
         </Card>
         <Card>
           <h2 className="text-lg font-black">Course progress</h2>
-          <ProgressBar value={total ? done / total : 0} className="mt-3" label="Course progress" />
+          <ProgressBar value={total ? done / total : 0} className="mt-3 [&>div]:origin-left [&>div]:animate-grow" label="Course progress" />
           <p className="mt-2 text-xs font-bold text-muted">
             {done} of {total} lessons completed
           </p>
@@ -256,10 +257,6 @@ export default async function DashboardPage() {
             </ol>
           )}
           <p className="mt-3 text-xs font-bold text-muted">{board.me.rank ? `You: #${board.me.rank}` : "You: not ranked yet"}</p>
-        </Card>
-        <Card className="border-dashed">
-          <h2 className="text-sm font-black uppercase tracking-wide text-muted">Coming later</h2>
-          <p className="mt-2 text-sm text-muted">The admin CMS, friends and study groups are not built yet.</p>
         </Card>
       </aside>
     </div>

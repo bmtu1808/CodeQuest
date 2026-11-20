@@ -77,7 +77,7 @@ export default async function ProfilePage() {
         ) : (
           <ul className="flex flex-wrap gap-2">
             {unlocked.map((a, i) => (
-              <li key={a.slug} style={{ animationDelay: `${600 + i * 60}ms` }} className="animate-pop rounded-full transition-transform hover:-translate-y-0.5 hover:scale-105 bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
+              <li key={a.slug} style={{ animationDelay: `${600 + i * 60}ms` }} className="animate-pop [animation-fill-mode:backwards] rounded-full transition-transform hover:-translate-y-0.5 hover:scale-105 bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
                 {a.title}
               </li>
             ))}

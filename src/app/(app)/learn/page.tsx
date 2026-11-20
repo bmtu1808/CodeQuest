@@ -32,14 +32,14 @@ export default async function LearnPage() {
         {path.map((w) =>
           w.playable ? (
             <div key={w.id} className="mb-10">
-              <div className="mb-5 flex items-center gap-3">
+              <div className="mb-5 flex animate-rise items-center gap-3">
                 <span className="grid size-11 place-items-center rounded-2xl text-white" style={{ background: w.color }}>
                   <DynamicIcon name={w.icon} size={24} />
                 </span>
                 <div className="flex-1">
                   <h2 className="text-2xl font-black">{w.title}</h2>
                   <div className="mt-1 flex items-center gap-3">
-                    <ProgressBar value={w.total ? w.completed / w.total : 0} className="h-2.5" label={`${w.title} progress`} />
+                    <ProgressBar value={w.total ? w.completed / w.total : 0} className="h-2.5 [&>div]:origin-left [&>div]:animate-grow" label={`${w.title} progress`} />
                     <span className="whitespace-nowrap text-xs font-bold text-muted">
                       {w.completed}/{w.total} lessons
                     </span>
@@ -54,7 +54,7 @@ export default async function LearnPage() {
         )}
 
         <h2 className="mb-3 mt-4 text-lg font-black">Coming next</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="stagger grid gap-3 sm:grid-cols-2">
           {path
             .filter((w) => !w.playable)
             .map((w) => (
