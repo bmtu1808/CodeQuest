@@ -49,6 +49,24 @@
   --animate-pop: pop 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.4);
   --animate-shake: shake 0.35s;
   --animate-float: float 4s ease-in-out infinite;
+  --animate-rise: rise 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  --animate-grow: grow 0.9s cubic-bezier(0.2, 0.8, 0.3, 1) 0.25s both;
+  --animate-spin-slow: spin 6s linear infinite;
+  --animate-wiggle: wiggle 2.4s ease-in-out infinite;
+  @keyframes rise {
+    0% { transform: translateY(14px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  @keyframes grow {
+    0% { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+  @keyframes wiggle {
+    0%, 100% { transform: rotate(0); }
+    10%, 30% { transform: rotate(-8deg); }
+    20%, 40% { transform: rotate(8deg); }
+    50% { transform: rotate(0); }
+  }
   @keyframes pop {
     0% { transform: scale(0.85); opacity: 0; }
     100% { transform: scale(1); opacity: 1; }

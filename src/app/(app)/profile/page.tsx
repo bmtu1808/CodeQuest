@@ -11,6 +11,7 @@ import { getAchievementsView } from "@/server/services/gamification-views";
 import { Avatar } from "@/components/ui/avatar";
 import { Card } from "@/components/ui/card";
 import { ProgressBar } from "@/components/ui/progress-bar";
+import { CountUp } from "@/components/profile/count-up";
 import { Heatmap } from "@/components/dashboard/heatmap";
 import { requireUser } from "@/server/auth/session";
 import { getActivity, getRecentCompletions, getSnapshot } from "@/server/services/snapshot";
@@ -23,38 +24,46 @@ export default async function ProfilePage() {
   const rating = await getMyRating(user.id);
   const unlocked = ach.filter((a) => a.unlockedAt);
   const stats = [
-    { label: "Total XP", value: snap.totalXp.toLocaleString("en-US") },
-    { label: "Level", value: snap.level.level },
-    { label: "Current streak", value: snap.streak },
-    { label: "Longest streak", value: snap.longestStreak },
-    { label: "Lessons completed", value: snap.lessonsCompleted },
+    { label: "Total XP", value: <CountUp value={snap.totalXp} /> },
+    { label: "Level", value: <CountUp value={snap.level.level} /> },
+    { label: "Current streak", value: <CountUp value={snap.streak} />, flame: snap.streak > 0 },
+    { label: "Longest streak", value: <CountUp value={snap.longestStreak} /> },
+    { label: "Lessons completed", value: <CountUp value={snap.lessonsCompleted} /> },
     { label: "Contest rating", value: rating ? `${rating.rating} · ${ratingTitle(rating.rating)}` : "Not rated" },
   ];
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
-      <Card className="flex flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left">
-        <Avatar name={user.displayName} color={user.avatarColor} size={88} />
+      <Card className="flex animate-rise flex-col items-center gap-4 p-6 text-center sm:flex-row sm:text-left">
+        <span className="relative grid size-[104px] shrink-0 place-items-center">
+          <span aria-hidden className="absolute inset-0 animate-spin-slow rounded-full" style={{ background: "conic-gradient(var(--color-grape), var(--color-sky), var(--color-brand), var(--color-gold), var(--color-grape))" }} />
+          <span className="relative animate-float rounded-full border-4 border-surface">
+            <Avatar name={user.displayName} color={user.avatarColor} size={88} />
+          </span>
+        </span>
         <div className="flex-1">
           <h1 className="text-2xl font-black">{user.displayName}</h1>
           <p className="text-muted">@{user.username}</p>
           <p className="mt-1 text-sm font-bold text-grape-dark dark:text-grape">
             Level {snap.level.level} · {snap.level.title}
           </p>
-          <ProgressBar value={snap.level.progress} className="mt-2 h-3" color="bg-grape" label="Level progress" />
+          <ProgressBar value={snap.level.progress} className="mt-2 h-3 [&>div]:origin-left [&>div]:animate-grow" color="bg-grape" label="Level progress" />
           <p className="mt-1 text-xs text-muted">Joined {user.createdAt.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</p>
         </div>
       </Card>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        {stats.map((s) => (
-          <Card key={s.label} className="p-4 text-center">
-            <p className="text-2xl font-black">{s.value}</p>
+        {stats.map((s, i) => (
+          <Card key={s.label} className="animate-rise p-4 text-center transition-transform duration-200 hover:-translate-y-1 hover:scale-[1.03]" style={{ animationDelay: `${80 + i * 70}ms` }}>
+            <p className="text-2xl font-black">
+              {"flame" in s && s.flame && <span aria-hidden className="mr-1 inline-block origin-bottom animate-wiggle">🔥</span>}
+              {s.value}
+            </p>
             <p className="text-[11px] font-bold uppercase text-muted">{s.label}</p>
           </Card>
         ))}
       </div>
 
-      <Card>
+      <Card className="animate-rise [animation-delay:500ms]">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-lg font-black">
             <Medal className="text-gold" size={20} /> Achievements
@@ -67,8 +76,8 @@ export default async function ProfilePage() {
           <p className="text-muted">None yet. Complete your first lesson to unlock First Steps.</p>
         ) : (
           <ul className="flex flex-wrap gap-2">
-            {unlocked.map((a) => (
-              <li key={a.slug} className="rounded-full bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
+            {unlocked.map((a, i) => (
+              <li key={a.slug} style={{ animationDelay: `${600 + i * 60}ms` }} className="animate-pop rounded-full transition-transform hover:-translate-y-0.5 hover:scale-105 bg-gold/15 px-3 py-1 text-sm font-bold text-gold-dark dark:text-gold">
                 {a.title}
               </li>
             ))}
@@ -76,12 +85,12 @@ export default async function ProfilePage() {
         )}
       </Card>
 
-      <Card>
+      <Card className="animate-rise [animation-delay:650ms]">
         <h2 className="mb-3 text-lg font-black">Activity</h2>
         <Heatmap days={activity} />
       </Card>
 
-      <Card>
+      <Card className="animate-rise [animation-delay:750ms]">
         <h2 className="mb-3 text-lg font-black">Recent lessons</h2>
         {recent.length === 0 ? (
           <p className="text-muted">Nothing here yet. Complete a lesson to see it appear.</p>
