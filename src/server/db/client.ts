@@ -12,7 +12,8 @@ function createPool() {
   return new Pool({
     connectionString: e.DATABASE_URL,
     ssl: e.DATABASE_SSL === "true" ? { rejectUnauthorized: false } : undefined,
-    max: 10,
+    // Serverless hosts start many instances, each with its own pool. Keep them small so a free database is not exhausted.
+    max: process.env.VERCEL ? 3 : 10,
   });
 }
 

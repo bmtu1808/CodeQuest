@@ -192,3 +192,18 @@ Key design decisions:
 - **Performance.** Pages are server-rendered with indexed queries; XP rules are cached for 15 seconds per instance. No load test has been run, and there is no CDN, Redis or queue. Rate limiting for Run/Submit and auth is in memory per instance. Discussion flood control is database-backed.
 - **Mobile.** The manifest makes the site installable, but there is no service worker, so there is no offline mode and no push notifications.
 - Study time and "forgot password" / Google sign-in remain unbuilt (see above).
+
+## Deploying to the web (Vercel + Neon)
+
+GitHub Pages cannot host this app (it needs a Node server and PostgreSQL). Vercel runs the app and Neon provides a free Postgres. The address will look like `https://codequest-xxxx.vercel.app`.
+
+1. **Database.** Create a project at https://neon.tech. Copy the **pooled** connection string (host contains `-pooler`). It already ends with `?sslmode=require`.
+2. **Create the tables once, from your computer.** In `.env.local` set `DATABASE_URL` to the Neon string and `DATABASE_SSL=true`, then run `npm run db:setup`. Run `npm run db:seed:problems` too if you have `g++`. Remove the Neon string from `.env.local` afterwards if you want to keep using the local database.
+3. **Vercel.** Add New, Project, import the GitHub repo. Framework is detected as Next.js, keep the defaults. Under Environment Variables add:
+   - `DATABASE_URL` = the Neon pooled string
+   - `DATABASE_SSL` = `true`
+   - `NEXT_PUBLIC_APP_URL` = your Vercel address (set it after the first deploy, then redeploy)
+   - `JUDGE0_URL` and its key variables, only if you have a Judge0 server (see `.env.example`). Without them Run/Submit say "judge unavailable".
+4. Deploy. Sign up on the site, then make yourself admin with the SQL in "Phase 5 notes" (run it in the Neon SQL editor).
+
+Notes: Run and Submit are limited to 60 seconds per request on serverless. Rate limits are kept in memory per instance, so on a serverless host they are best effort, not a hard guarantee. The database pool is capped at 3 connections per instance on Vercel. Never put the database string or any key in the repository.
