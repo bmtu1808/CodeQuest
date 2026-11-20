@@ -1,5 +1,6 @@
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/server/db/client";
+import { SKIP_MIN_POOL, skippedUnitIds } from "./skip";
 
 export type LessonState = "locked" | "available" | "in_progress" | "completed" | "perfected";
 
@@ -13,6 +14,7 @@ export type PathLesson = {
 };
 export type PathUnit = {
   id: string;
+  slug: string;
   title: string;
   description: string;
   icon: string;
@@ -21,6 +23,10 @@ export type PathUnit = {
   total: number;
   xp: number;
   state: "locked" | "unlocked" | "completed";
+  /** Passed the skip test: its lessons count as done but earned no XP. */
+  skipped: boolean;
+  /** A skip test can be taken for this unit right now. */
+  canSkip: boolean;
 };
 export type PathWorld = {
   id: string;
@@ -67,6 +73,13 @@ export function lessonSequence(c: Curriculum): string[] {
   return c.filter((w) => w.world.published).flatMap((w) => w.units.flatMap((u) => u.lessons.map((l) => l.id)));
 }
 
+/** Lessons of units the learner tested out of count as completed (for unlocking and display) without being credited. */
+export function withSkips(c: Curriculum, completed: Set<string>, skipped: Set<string>): Set<string> {
+  const out = new Set(completed);
+  for (const w of c) for (const u of w.units) if (skipped.has(u.unit.id)) for (const l of u.lessons) out.add(l.id);
+  return out;
+}
+
 export async function loadUserProgress(userId: string) {
   const db = getDb();
   const progress = await db.select().from(schema.userLessonProgress).where(eq(schema.userLessonProgress.userId, userId));
@@ -82,7 +95,10 @@ export async function loadUserProgress(userId: string) {
 }
 
 export async function getLearningPath(userId: string): Promise<PathWorld[]> {
-  const [curriculum, prog] = await Promise.all([loadCurriculum(), loadUserProgress(userId)]);
+  const [curriculum, prog0, skipped] = await Promise.all([loadCurriculum(), loadUserProgress(userId), skippedUnitIds(userId)]);
+  const prog = { ...prog0, completed: withSkips(curriculum, prog0.completed, skipped) };
+  const poolRows = await getDb().execute(sql`select l.unit_id, count(*)::int n from lesson_questions q join lessons l on l.id = q.lesson_id where q.deleted_at is null and l.deleted_at is null and l.published group by l.unit_id`);
+  const pool = new Map((poolRows.rows as Array<{ unit_id: string; n: number }>).map((r) => [r.unit_id, Number(r.n)]));
   const seq = lessonSequence(curriculum);
   const firstOpen = seq.findIndex((id) => !prog.completed.has(id));
 
@@ -107,6 +123,7 @@ export async function getLearningPath(userId: string): Promise<PathWorld[]> {
       const completed = ls.filter((l) => l.state === "completed" || l.state === "perfected").length;
       return {
         id: unit.id,
+        slug: unit.slug,
         title: unit.title,
         description: unit.description,
         icon: unit.icon,
@@ -115,6 +132,8 @@ export async function getLearningPath(userId: string): Promise<PathWorld[]> {
         total: ls.length,
         xp: ls.reduce((s, l) => s + l.xpReward, 0),
         state: completed === ls.length && ls.length > 0 ? "completed" : ls.some((l) => l.state !== "locked") ? "unlocked" : "locked",
+        skipped: skipped.has(unit.id),
+        canSkip: world.published && !skipped.has(unit.id) && completed < ls.length && (pool.get(unit.id) ?? 0) >= SKIP_MIN_POOL,
       };
     });
     return {
@@ -139,11 +158,12 @@ export function nextLesson(path: PathWorld[]): PathLesson | null {
 }
 
 export async function isLessonUnlocked(userId: string, lessonId: string): Promise<boolean> {
-  const [curriculum, prog] = await Promise.all([loadCurriculum(), loadUserProgress(userId)]);
+  const [curriculum, prog, skipped] = await Promise.all([loadCurriculum(), loadUserProgress(userId), skippedUnitIds(userId)]);
+  const done = withSkips(curriculum, prog.completed, skipped);
   const seq = lessonSequence(curriculum);
   const idx = seq.indexOf(lessonId);
   if (idx === -1) return false;
-  return seq.slice(0, idx).every((id) => prog.completed.has(id));
+  return seq.slice(0, idx).every((id) => done.has(id));
 }
 
 export async function lessonsByIds(ids: string[]) {

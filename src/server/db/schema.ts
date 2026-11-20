@@ -751,3 +751,27 @@ export type Contest = typeof contests.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type Problem = typeof problems.$inferSelect;
 export type Submission = typeof submissions.$inferSelect;
+
+// ───────────────────────── Skip-ahead tests ─────────────────────────
+
+/** One attempt at "testing out" of a unit. A unit counts as skipped once an attempt has `passed = true`. */
+export const skipAttempts = pgTable(
+  "skip_attempts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    unitId: uuid("unit_id")
+      .notNull()
+      .references(() => units.id, { onDelete: "cascade" }),
+    /** The questions drawn for this attempt, in display order. */
+    questionIds: jsonb("question_ids").$type<string[]>().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+    score: integer("score"),
+    total: integer("total").notNull(),
+    passed: boolean("passed").notNull().default(false),
+  },
+  (t) => [index("skip_user_unit_idx").on(t.userId, t.unitId, t.startedAt)],
+);

@@ -32,6 +32,7 @@ export default async function PracticePage({ searchParams }: { searchParams: Pro
     <div className="mx-auto max-w-3xl">
       <h1 className="text-3xl font-black">Practice</h1>
       <p className="mt-1 text-muted">Solve real problems. Every submission is judged on hidden tests by a real judge.</p>
+      <p className="mt-1 text-sm"><Link href="/practice/links" className="font-extrabold text-sky hover:underline">More problems on CSES, Codeforces, AtCoder and VNOJ →</Link></p>
 
       <form action="/practice" className="mt-5 flex gap-2" role="search">
         {filters.difficulty && <input type="hidden" name="difficulty" value={filters.difficulty} />}

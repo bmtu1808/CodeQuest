@@ -1,5 +1,7 @@
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ExternalLink, FastForward } from "lucide-react";
+import Link from "next/link";
 import { DynamicIcon } from "@/components/ui/icon";
+import { externalForUnit } from "@/content/external-problems";
 import { ProgressBar } from "@/components/ui/progress-bar";
 import type { PathUnit } from "@/server/services/path";
 import { LessonNode } from "./lesson-node";
@@ -29,6 +31,17 @@ export function UnitSection({ unit, index, color }: { unit: PathUnit; index: num
             {unit.completed}/{unit.total} · {unit.xp} XP
           </span>
         </div>
+        {unit.skipped && <p className="mt-3 text-xs font-extrabold uppercase text-white/90">Skipped by test. You can still replay any lesson.</p>}
+        {unit.canSkip && (
+          <Link href={`/learn/skip/${unit.id}`} className="mt-3 inline-flex items-center gap-2 rounded-xl bg-white/20 px-3 py-1.5 text-xs font-extrabold uppercase hover:bg-white/30">
+            <FastForward size={14} /> Already know this? Test out
+          </Link>
+        )}
+        {externalForUnit(unit.slug).length > 0 && (
+          <Link href={`/practice/links#${unit.slug}`} className="ml-2 mt-3 inline-flex items-center gap-2 rounded-xl bg-white/20 px-3 py-1.5 text-xs font-extrabold uppercase hover:bg-white/30">
+            <ExternalLink size={14} /> {externalForUnit(unit.slug).length} practice links
+          </Link>
+        )}
       </div>
       <ol className="mt-8 flex flex-col items-center gap-7 p-0">
         {unit.lessons.map((l, i) => (

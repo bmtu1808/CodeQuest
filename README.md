@@ -193,6 +193,13 @@ Key design decisions:
 - **Mobile.** The manifest makes the site installable, but there is no service worker, so there is no offline mode and no push notifications.
 - Study time and "forgot password" / Google sign-in remain unbuilt (see above).
 
+## Phase 6 notes: skip-ahead, more lessons, external practice links
+
+- **Skip-ahead ("test out")**: every unit with at least 6 questions shows "Already know this? Test out". The test draws up to 10 questions across the unit's lessons, needs 80% to pass, costs no hearts and gives no XP, with a 30-minute cooldown after a failed attempt. Passing counts the unit's lessons as completed for unlocking; no progress rows are created, so replaying a lesson later still earns its XP once. Correct answers are only shown after passing. Migration: `drizzle/0005_skip_tests.sql`.
+- **Content**: World 2 *C++ Intermediate* (arrays, strings, vectors, sorting/searching, references/pointers) and World 3 *Data Structures* (stack/queue/deque, set/map, priority_queue/pair/complexity) are now published: 41 lessons / 235 questions in total. `npm run content:verify` compiles and runs every predict-output program with g++. Worlds 4-6 are still "Coming soon".
+- **External practice links** (`/practice/links`, `src/content/external-problems.ts`): CSES task ids were taken from the CSES problem set; the few Codeforces, AtCoder and VNOJ links are pages confirmed to exist. They open on the other site, are not judged by CodeQuest and give no XP. Add more by editing that file.
+- After pulling, run `npm run db:setup` to apply migrations and seed the new lessons.
+
 ## Deploying to the web (Vercel + Neon)
 
 GitHub Pages cannot host this app (it needs a Node server and PostgreSQL). Vercel runs the app and Neon provides a free Postgres. The address will look like `https://codequest-xxxx.vercel.app`.

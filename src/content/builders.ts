@@ -65,3 +65,10 @@ export function prog(body: string, pre = ""): string {
   const head = "#include <iostream>\nusing namespace std;\n\n";
   return `${head}${pre ? `${pre}\n\n` : ""}int main() {\n${indented}\n    return 0;\n}`;
 }
+
+/** Like prog() but with extra #include lines (e.g. ["vector", "algorithm"]). */
+export function progh(headers: string[], body: string, pre = ""): string {
+  const p = prog(body, pre);
+  const extra = headers.map((h) => `#include <${h}>\n`).join("");
+  return p.replace("#include <iostream>\n", `#include <iostream>\n${extra}`);
+}
